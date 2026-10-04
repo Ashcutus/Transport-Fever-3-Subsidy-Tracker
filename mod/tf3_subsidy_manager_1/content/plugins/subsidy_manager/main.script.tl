@@ -342,7 +342,10 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 		},
 	}
 
+	-- Choose once per snapshot, not per selected tab; keep populated revision 9 sizing.
+	local hasRecords = #current.active + #current.offered + #history > 0
 	return builtin.Window {
+		meta = { class = hasRecords and "tf3-subsidy-populated" or "tf3-subsidy-empty" },
 		id = WINDOW_ID,
 		tool = "TF3SubsidyManager",
 		title = _("tf3_subsidy_manager_title"),

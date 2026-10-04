@@ -17,6 +17,9 @@ function data()
     a("R::GameBarMenuRight !tf3-subsidy-tray-pair", { innerSpacing = { 10, 0 } })
 
     a("#tf3-subsidy-manager.window", { size = { 1180, 640 }, minSize = { 1180, 640 }, maxSize = { 1180, 640 } })
+    -- Empty snapshots use a compact preset; populated snapshots keep revision 9 dimensions.
+    a("#tf3-subsidy-manager.window!tf3-subsidy-empty", { size = { 640, 260 }, minSize = { 640, 260 }, maxSize = { 640, 260 } })
+    a("#tf3-subsidy-manager.window!tf3-subsidy-empty !tf3-subsidy-data-region", { size = { -1, 110 } })
     -- Match native statistics: padding belongs to the Window content widget.
     a("#tf3-subsidy-manager.window Window::Content", { padding = { 16, 12, 16, 12 } })
     a("!tf3-subsidy-content", { gravity = { -1, -1 }, innerSpacing = { 0, 12 } })

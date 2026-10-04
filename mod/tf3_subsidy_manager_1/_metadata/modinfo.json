@@ -5,12 +5,12 @@
             "role": "CREATOR"
         }
     ],
-    "description": "Read-only proof of concept for reviewing TF3 subsidy state.",
-    "name": "Subsidy Manager (Proof of Concept)",
-    "summary": "Displays proposed, active, completed, and failed subsidies exposed by the current save.",
+    "description": "Subsidy Manager v1.0.0 brings offered, active and historical subsidies together in one native-style overview.\n\nLoad a save and click Subsidy Manager beside Industry Statistics in the bottom-right toolbar. Choose In Progress, Offered or History; click a row to open the game's subsidy details and native Accept/Decline controls where available. Use Refresh to update the overview.\n\nShows available resource, destination, progress, rewards and remaining time. History contains only records retained by TF3. No simulation changes, custom subsidy state or keyboard shortcut is added.\n\nTested on Linux. Other platforms and console eligibility have not been verified. Platform availability depends on Mod Hub processing.",
+    "name": "Subsidy Manager",
+    "summary": "View offered, active and historical subsidies, then open their native TF3 details.",
     "tags": [
         "Misc",
         "Script Mod"
     ],
-    "url": ""
+    "url": "https://github.com/Ashcutus/Transport-Fever-3-Subsidy-Tracker"
 }
