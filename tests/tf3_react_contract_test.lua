@@ -95,8 +95,8 @@ end
 
 -- Mutation check: revision 5's registration must reproduce the reported failure.
 local oldRegistration, count = source:gsub(
-    'react.RegisterWrapperRecipe%("CopilotSubsidyManagerGameBar", originalGameBar,',
-    'react.RegisterRecipe("CopilotSubsidyManagerGameBar",')
+    'react.RegisterWrapperRecipe%("TF3SubsidyManagerGameBar", originalGameBar,',
+    'react.RegisterRecipe("TF3SubsidyManagerGameBar",')
 assert(count == 1, "Expected one native GameBar wrapper registration")
 check(oldRegistration, false)
 check(source, true)

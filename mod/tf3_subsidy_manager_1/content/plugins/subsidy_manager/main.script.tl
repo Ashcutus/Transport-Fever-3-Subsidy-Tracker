@@ -5,7 +5,7 @@ local langUtil = ug_require "::/scripts/lang_util.tl" as LangUtil
 local toolUtil = ug_require "::/gui/main/tool_react_util.tl" as ToolReactUtil
 local gameBar = ug_require "::/gui/game_bar/game_bar.tl" as GameBar
 
-local WINDOW_ID = "copilot-subsidy-manager.window"
+local WINDOW_ID = "tf3-subsidy-manager.window"
 local DEBUG_LOGGING = false
 
 local SUBVENTION_SCRIPT = "::/game_mechanics/subventions/subventions.gs"
@@ -87,7 +87,7 @@ local function copyEntries(items : {ISubvention}, offered? : boolean) : {Entry}
 	local entries : {Entry} = {}
 	for _index, item in ipairs(items) do
 		local data = type(item) == "table" and item.data or nil
-		local entry : Entry = { name = _("copilot_subsidy_manager_unknown_name") }
+		local entry : Entry = { name = _("tf3_subsidy_manager_unknown_name") }
 		if type(data) == "table" then
 			if type(data.name) == "string" and data.name ~= "" then entry.name = _(data.name) end
 			local required = data.toDeliver
@@ -99,7 +99,7 @@ local function copyEntries(items : {ISubvention}, offered? : boolean) : {Entry}
 			entry.recordCopy = copyTable(item) as ISubvention
 			local ok, card = pcall(getCard, entry.recordCopy, offered or false)
 			if ok then entry.card = card as SubventionCardData
-			else log.warning("[copilot_subsidy_manager] Unable to format subsidy: " .. tostring(card)) end
+			else log.warning("[tf3_subsidy_manager] Unable to format subsidy: " .. tostring(card)) end
 		end
 		entries[#entries + 1] = entry
 	end
@@ -131,24 +131,24 @@ end
 local function readSnapshot() : Snapshot
 	local ok, result = pcall(querySnapshot)
 	if not ok then
-		log.warning("[copilot_subsidy_manager] Unable to read subsidy state: " .. tostring(result))
+		log.warning("[tf3_subsidy_manager] Unable to read subsidy state: " .. tostring(result))
 		local snapshot = emptySnapshot()
 		snapshot.readError = true
 		return snapshot
 	end
 	local snapshot = result as Snapshot
 	if DEBUG_LOGGING and snapshot.stateFound then
-		log.warning("[copilot_subsidy_manager] Read subsidy state from " .. snapshot.scriptName)
+		log.warning("[tf3_subsidy_manager] Read subsidy state from " .. snapshot.scriptName)
 	end
 	return snapshot
 end
 
 local function renderEntry(item : Entry, outcome : string, active? : boolean) : TreeNodeId
-	local details = _("copilot_subsidy_manager_unknown_progress")
+	local details = _("tf3_subsidy_manager_unknown_progress")
 	if item.required ~= nil and item.delivered ~= nil then
 		local progress = item.required > 0 and math.floor(item.delivered / item.required * 100) or 0
 		if progress < math.huge then
-			details = string.format(_("copilot_subsidy_manager_progress"), item.delivered, item.required, progress)
+			details = string.format(_("tf3_subsidy_manager_progress"), item.delivered, item.required, progress)
 		end
 	end
 	local prefix = outcome ~= "" and outcome .. "  " or ""
@@ -165,7 +165,7 @@ local function renderEntry(item : Entry, outcome : string, active? : boolean) : 
 			if card.location.to then task[#task + 1] = builtin.TextView { text = "→ " .. card.location.to[2] } end
 		end
 		children[#children + 1] = builtin.BoxLayout { orientation = builtin.type.Orientation.Horizontal, children = task }
-		local effects = outcome == _("copilot_subsidy_manager_failed") and card.failure or card.complete
+		local effects = outcome == _("tf3_subsidy_manager_failed") and card.failure or card.complete
 		for _index, effect in ipairs(effects or {}) do
 			children[#children + 1] = builtin.TextView { text = effect.text }
 		end
@@ -214,7 +214,7 @@ end
 local record WindowParams is ToolReactUtil.IToolWindowParam<ToolReactUtil.IToolParam>
 end
 
-local SubsidyManagerWindow = react.RegisterWrapperRecipe("CopilotSubsidyManagerWindow", builtin.Window, function(params : WindowParams) : TreeNodeId
+local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindow", builtin.Window, function(params : WindowParams) : TreeNodeId
 	local snapshot : ReactStateT<Snapshot> = react.useStateLazy(readSnapshot)
 	local selectedTab : ReactStateT<integer> = react.useState(1)
 
@@ -233,23 +233,23 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("CopilotSubsidyManagerW
 	local content : TreeNodeId
 	local current = snapshot:old()
 	if current.readError then
-		content = builtin.TextView { text = _("copilot_subsidy_manager_read_error") }
+		content = builtin.TextView { text = _("tf3_subsidy_manager_read_error") }
 	elseif not current.stateFound then
-		content = builtin.TextView { text = _("copilot_subsidy_manager_unavailable") }
+		content = builtin.TextView { text = _("tf3_subsidy_manager_unavailable") }
 	elseif selectedTab:old() == 1 then
-		content = renderList(current.active, _("copilot_subsidy_manager_no_active"), "", true)
+		content = renderList(current.active, _("tf3_subsidy_manager_no_active"), "", true)
 	elseif selectedTab:old() == 2 then
-		content = renderList(current.offered, _("copilot_subsidy_manager_no_offers"), "")
+		content = renderList(current.offered, _("tf3_subsidy_manager_no_offers"), "")
 	else
 		local history : {TreeNodeId} = {}
 		if #current.completed == 0 and #current.failed == 0 then
-			history[1] = builtin.TextView { text = _("copilot_subsidy_manager_no_history") }
+			history[1] = builtin.TextView { text = _("tf3_subsidy_manager_no_history") }
 		else
 			for _index, item in ipairs(current.completed) do
-				history[#history + 1] = renderEntry(item, _("copilot_subsidy_manager_completed"))
+				history[#history + 1] = renderEntry(item, _("tf3_subsidy_manager_completed"))
 			end
 			for _index, item in ipairs(current.failed) do
-				history[#history + 1] = renderEntry(item, _("copilot_subsidy_manager_failed"))
+				history[#history + 1] = renderEntry(item, _("tf3_subsidy_manager_failed"))
 			end
 		end
 		content = builtin.BoxLayout {
@@ -261,12 +261,12 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("CopilotSubsidyManagerW
 	local controls = builtin.BoxLayout {
 		orientation = builtin.type.Orientation.Horizontal,
 		children = {
-			tabButton(_("copilot_subsidy_manager_active"), 1),
-			tabButton(_("copilot_subsidy_manager_offered"), 2),
-			tabButton(_("copilot_subsidy_manager_history"), 3),
+			tabButton(_("tf3_subsidy_manager_active"), 1),
+			tabButton(_("tf3_subsidy_manager_offered"), 2),
+			tabButton(_("tf3_subsidy_manager_history"), 3),
 			builtin.Button {
-				meta = { tooltip = _("copilot_subsidy_manager_refresh_tooltip") },
-				content = builtin.TextView { text = _("copilot_subsidy_manager_refresh") },
+				meta = { tooltip = _("tf3_subsidy_manager_refresh_tooltip") },
+				content = builtin.TextView { text = _("tf3_subsidy_manager_refresh") },
 				onClick = refresh,
 			},
 		},
@@ -274,8 +274,8 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("CopilotSubsidyManagerW
 
 	return builtin.Window {
 		id = WINDOW_ID,
-		tool = "CopilotSubsidyManager",
-		title = _("copilot_subsidy_manager_title"),
+		tool = "TF3SubsidyManager",
+		title = _("tf3_subsidy_manager_title"),
 		onClose = params.onClose,
 		closable = true,
 		movable = true,
@@ -296,7 +296,7 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("CopilotSubsidyManagerW
 end)
 
 -- Native tools remove their windows on pop and shelve them under the pause menu.
-local ManagerTool = toolUtil.registerToolWithWindow("CopilotSubsidyManager", WINDOW_ID, SubsidyManagerWindow)
+local ManagerTool = toolUtil.registerToolWithWindow("TF3SubsidyManager", WINDOW_ID, SubsidyManagerWindow)
 
 -- No tray extension is shipped. The bootstrap callback wraps only creation of the
 -- Industry ToolButton; all native calls/refs are forwarded unchanged. This is an
@@ -315,7 +315,7 @@ local function installToolbar(_replacementApi : ReactReplacementApi)
 	local originalGameBar = gameBar.GameBar
 	-- CallOriginalRecipe creates a GameBar recipe node, not its layout.
 	-- Register the delegation as a wrapper so the native transform can unwrap it.
-	local WithContext = react.RegisterWrapperRecipe("CopilotSubsidyManagerGameBar", originalGameBar, function(params : GameBar.GameBarParam) : TreeNodeId
+	local WithContext = react.RegisterWrapperRecipe("TF3SubsidyManagerGameBar", originalGameBar, function(params : GameBar.GameBarParam) : TreeNodeId
 		currentGameCtx = params.gameCtx
 		return react.CallOriginalRecipe(originalGameBar, params)
 	end)
@@ -331,19 +331,19 @@ local function installToolbar(_replacementApi : ReactReplacementApi)
 		if type(params) ~= "table" or not params.meta or params.meta.id ~= "menu.industry-statistics.button" or not currentGameCtx then return node end
 		local gameCtx = currentGameCtx
 		return builtin.BoxLayout {
-			meta = { class = "copilot-subsidy-tray-pair" },
+			meta = { class = "tf3-subsidy-tray-pair" },
 			orientation = builtin.type.Orientation.Horizontal,
 			children = {
 				node,
 				originalToolButton {
 					meta = {
-						id = "copilot-subsidy-manager.button",
-						tooltip = _("copilot_subsidy_manager_button_tooltip"),
+						id = "tf3-subsidy-manager.button",
+						tooltip = _("tf3_subsidy_manager_button_tooltip"),
 						disableFocusableRecursive = true,
 					},
 					toolDefinition = ManagerTool,
 					toolStack = params.toolStack,
-					content = builtin.ImageView { path = "copilot_subsidy_manager::/plugins/subsidy_manager/icons/contract_26.tga" },
+					content = builtin.ImageView { path = "tf3_subsidy_manager::/plugins/subsidy_manager/icons/contract_26.tga" },
 					showFn = function()
 						gameCtx.toolStack:get():getApi().push(ManagerTool, nil, { gameCtx = gameCtx }, true)
 					end,

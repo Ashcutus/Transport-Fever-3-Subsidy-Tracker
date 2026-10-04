@@ -3,6 +3,7 @@
 - Before opening every pull request, increment the integer `revision` in `mod/tf3_subsidy_manager_1/mod.json` by exactly one from the current value. This applies to documentation-only pull requests as well as mod changes.
 - Include the revision change in the same pull request and mention the new revision in its description.
 - Do not change the mod ID as part of routine version bumps.
+- The user explicitly requested a complete branding removal in PR #5. That PR separately renames the identity/resource namespace to `tf3_subsidy_manager`; keep resource references consistent and document that existing saves may need the renamed mod enabled again.
 
 ## TF3 Development Findings
 
@@ -17,7 +18,7 @@ These findings come from the installed TF3 resources and real game logs inspecte
 
 ### React Recipe/Layout Contract — Confirmed Startup Regression
 
-- **Revision 5 failed real UI startup** with `Recipe child must be a layout`, naming `CopilotSubsidyManagerGameBar`. The log points to native `react_transform.cpp:274`, `TransformDefault`.
+- **Revision 5 failed real UI startup** with `Recipe child must be a layout`, naming the manager's GameBar delegation. The log points to native `react_transform.cpp:274`, `TransformDefault`.
 - `react.CallOriginalRecipe(original, params)` creates a node for the original recipe. It does not execute that recipe and return its underlying layout immediately.
 - An ordinary `RegisterRecipe` that delegates by returning this original recipe node violates the default native layout-child contract. Use `RegisterWrapperRecipe(name, originalRecipe, fn)` when returning that wrapped recipe node. This supplies `_react.recipeMetas[wrapperId].innerRecipeId`; the shipped React implementation checks the wrapped child against the original recipe.
 - The GameBar delegation must use wrapper registration around the original `gameBar.GameBar`. Preserve `CallOriginalRecipe` to bypass the replacement and avoid recursion. Do not register a second ordinary recipe around it.

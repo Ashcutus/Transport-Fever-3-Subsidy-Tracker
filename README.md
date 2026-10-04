@@ -61,6 +61,8 @@ If the `mods` folder does not exist, create it. After copying, verify the manife
 
 For another Steam account or platform, use that account's TF3 user-data `mods` directory; the Steam account ID and Steam library location may differ. Do not copy the mod into the game installation directory. TF3's mod browser uses mod.io; this source directory can also be packaged and shared manually.
 
+Revision 6 uses the mod ID `tf3_subsidy_manager` and matching resource namespace. This identity rename removes the former branding; it is separate from the revision bump. Existing saves that enabled the previous mod identity may need the renamed mod enabled again in their mod list. The folder remains `tf3_subsidy_manager_1`, and the mod stores no simulation state to migrate.
+
 ## Removal
 
 Disable the mod in the save's mod list, exit the game, and remove the `tf3_subsidy_manager_1` directory from the user-data `mods` directory. This POC stores no custom simulation or subsidy state, so removing it cannot remove or corrupt subsidy records.
