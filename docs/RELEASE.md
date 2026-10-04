@@ -1,36 +1,36 @@
-# v1.0.0 release preparation
+# v1.0.1 release preparation
 
-Public version: **v1.0.0**. TF3 internal revision: **10**, incremented from the revision 9 UAT baseline. Identity: `tf3_subsidy_manager`.
+Public version: **v1.0.1**. TF3 internal revision: **12**, unchanged. Mod identity: `tf3_subsidy_manager`. Folder identity: `tf3_subsidy_manager_1`.
 
-## Prepared
+## Scope
 
-- Public README, release notes and screenshot locations.
-- Display name **Subsidy Manager**, concise summary, English description with usage and compatibility limits, creator credit, `Script Mod` / `Misc` tags and GitHub URL.
-- No required external mods; existing dependency/incompatibility fields remain unchanged.
-- `VERSION`, release notes, archive filename and supported description text carry the public version. No unsupported semantic-version or platform field was added to TF3 JSON. mod.io's file release version is independently editable; use **1.0.0** there when the publishing workflow permits it. [mod.io file documentation](https://docs.mod.io/restapi/docs/edit-modfile).
-- No local filesystem, external process, network, or keyboard-shortcut requirement in the shipped runtime. All mod-owned assets are packaged; base-game resource references resolve through TF3.
+v1.0.0 is already published on mod.io. v1.0.1 updates the existing listing's description and summary only. Runtime code, UI, subsidy behaviour and assets are unchanged.
 
-## Package
+The committed public metadata retains author **Ashcutus**, name **Subsidy Manager**, the improved description beginning “Never lose track of a subsidy again.”, the summary, `Misc` / `Script Mod` tags and the existing GitHub URL.
+
+`VERSION` defines the public version and manual-install archive filename. The description does not need an embedded version. No public version or platform fields are added to TF3 JSON. Use **1.0.1** as the mod.io file version during manual publication.
+
+## Local package validation
 
 ```sh
+python3 tests/release_package_test.py
 python3 scripts/package_release.py
 ```
 
-This produces `dist/subsidy-manager-v1.0.0.zip` and a SHA-256 sidecar. The ZIP contains the `tf3_subsidy_manager_1` folder for manual installation. Its runtime allowlist includes the manifest, translations, descriptive metadata, plugin script/resource/stylesheet and toolbar TGA. Approved numbered preview PNGs are included when present. The standard MIT notice is included as `license.txt`. Tests, editor definitions/configuration, SVG source, developer documentation and repository configuration are excluded.
+The local artifact is `dist/subsidy-manager-v1.0.1.zip`, with a `.zip.sha256` sidecar. The archive contains the existing `tf3_subsidy_manager_1` folder and allowlisted runtime files, including metadata and the MIT notice. Approved numbered metadata PNGs are included when present. Generated `dist/` files are ignored by Git.
 
-For native publishing, extract that folder into your own TF3 user-data `staging_area`, then use Mod Hub → My Mods. Complete the game's upload validation and review its platform results. No account upload, public release/tag or Mod Hub listing was created by this preparation pass. The [official publishing instructions](https://wiki.transportfever3.com/doku.php?id=modding:general:publishing) describe staging, gallery editing and generated upload identity; retain the generated `_metadata/mod.io_fileid.txt` after first upload so future updates target the same listing.
+Repository screenshots and a cover are not included here. This is not a new-listing blocker: preserve the existing published listing and its gallery. No placeholder assets are required.
 
-## Before publication
+## Manual publication handoff
 
-1. Test the compact-empty preset: all-empty snapshot opens compact; navigation stays stable; manual Refresh can change to/from table sizing. When any list has records, every tab must retain revision 9 dimensions, padding, stretch, scrolling and selection.
-2. Add genuine screenshots. `_metadata/0.png` is the cover; use numbered PNGs at 1920×1080 for gallery images. No screenshot or preview has been invented. [Metadata requirements](https://wiki.transportfever3.com/doku.php?id=modding:general:moddefinition).
-3. Confirm the archive includes the standard MIT notice from [LICENSE](../LICENSE). The license was explicitly selected by the maintainer; no additional restrictions apply.
-4. Run all checks in [DEVELOPMENT.md](DEVELOPMENT.md), rebuild the ZIP, review its contents and upload validation. Set the public file version to 1.0.0 where supported, and use [CHANGELOG.md](../CHANGELOG.md) for the initial release text.
+Run the checks in [DEVELOPMENT.md](DEVELOPMENT.md), review the archive/checksum and use the [v1.0.1 release notes](../RELEASE_NOTES.md).
 
-## Platform evidence and limits
+Update the existing **Subsidy Manager** item through TF3's Mod Hub → My Mods. Preserve existing mod.io IDs and publication-linkage metadata, including `_metadata/mod.io_fileid.txt` wherever the native uploader has generated it. No linkage file is tracked in this repository; do not replace the existing publication setup with a new item or invent an ID.
 
-Revision 9 was tested on Linux with working toolbar fit, shared inset, offered/history tables, empty active view, native detail/map highlighting and offered Accept/Decline. The compact-empty sizing change has not had a new game run. Windows, macOS and console behavior are untested; populated active/large-record behavior is covered by mocks, not newly claimed real-game evidence.
+Repository preparation does not modify the local TF3 staging area, upload, publish, tag, push or create a mod.io item. The maintainer handles staging and publication manually.
 
-Urban Games describes automatic console optimization in its [Mod Hub overview](https://www.transportfever3.com/news/dev-blog-episode-5-highlights/). No hand-built console fork is needed for this preparation. Eligibility depends on TF3/mod.io validation and platform approval; it is not established here.
+## Validation and runtime evidence
 
-The official [guidelines](https://wiki.transportfever3.com/doku.php?id=modding:general:guidelines) call for official scripting APIs and impose additional console restrictions, including custom shaders. This mod has no custom shader, executable or simulation mutation, but the proven toolbar integration uses undocumented shipped GUI internals. That may affect upload validation/eligibility and needs verification rather than an unsupported compatibility promise. The small native-style TGA uses the same asset convention as shipped toolbar icons; platform texture processing still needs the game's validation. The referenced guideline/publishing pages currently display an old-revision notice, so confirm the uploader's current checks before publication.
+The maintainer reports that PC/console package validation has occurred for the published release. This is separate from runtime testing: Linux gameplay has been tested; Windows, macOS, Xbox and PlayStation runtime testing has not been performed.
+
+Completed pre-v1 visual UAT is not an outstanding requirement for this metadata-only update. Lua mocks and contract checks do not establish native C++ layout, painting or cross-platform runtime compatibility. Mods replacing the same toolbar internals may conflict, and TF3 updates may require compatibility review.

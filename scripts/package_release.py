@@ -33,8 +33,8 @@ def build(output: Path) -> Path:
         raise ValueError("Display name must fit TF3's metadata limit")
     if not 0 < len(info["summary"]) <= 100 or "\n" in info["summary"]:
         raise ValueError("Summary must fit TF3's metadata limit")
-    if f"v{version}" not in info["description"]:
-        raise ValueError("Public metadata description must match VERSION")
+    if not isinstance(info["description"], str) or not info["description"].strip():
+        raise ValueError("Public metadata description must be nonempty")
     files = list(RUNTIME_FILES)
     for path in sorted((MOD / "_metadata").glob("*.png")):
         if not re.fullmatch(r"\d+\.png", path.name):
@@ -78,7 +78,7 @@ def build(output: Path) -> Path:
     archive.with_suffix(".zip.sha256").write_text(f"{checksum}  {archive.name}\n", encoding="utf-8")
     print(f"Built {archive} ({len(payload)} files, TF3 revision {manifest['revision']})")
     if not (MOD / "_metadata/0.png").is_file():
-        print("Publication cover is still missing: add a real _metadata/0.png before Mod Hub upload.")
+        print("No repository cover included; preserve the existing Mod Hub listing's gallery when updating.")
     return archive
 
 

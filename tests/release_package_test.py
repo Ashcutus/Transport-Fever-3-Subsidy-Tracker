@@ -12,12 +12,12 @@ spec = importlib.util.spec_from_file_location("package_release", ROOT / "scripts
 builder = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(builder)
 version = (ROOT / "VERSION").read_text().strip()
-assert version == "1.0.0"
+assert version == "1.0.1"
 with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
     archive = builder.build(Path(first))
     again = builder.build(Path(second))
     assert archive.read_bytes() == again.read_bytes(), "Package builds must be reproducible"
-    assert archive.name == "subsidy-manager-v1.0.0.zip"
+    assert archive.name == "subsidy-manager-v1.0.1.zip"
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     assert archive.with_suffix(".zip.sha256").read_text().split()[0] == digest
     with zipfile.ZipFile(archive) as package:
@@ -29,13 +29,17 @@ with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as se
         assert not any(re.search(r"tests/|AGENTS|README|tlconfig|all_def|\.svg$|__pycache__|\.git", name) for name in names)
         manifest = json.loads(package.read(prefix + "mod.json"))
         assert manifest["modId"] == "tf3_subsidy_manager"
-        assert type(manifest["revision"]) is int and manifest["revision"] >= 10, "Public version must not reset the internal revision counter"
+        assert type(manifest["revision"]) is int and manifest["revision"] == 12, "Metadata-only v1.0.1 must preserve revision 12"
         assert manifest == json.loads((builder.MOD / "mod.json").read_text())
         assert "version" not in manifest and "platforms" not in manifest
         info = json.loads(package.read(prefix + "_metadata/modinfo.json"))
         assert info["name"] == "Subsidy Manager" and len(info["name"]) <= 32
         assert len(info["summary"]) <= 100 and "\n" not in info["summary"]
-        assert "v1.0.0" in info["description"]
+        assert info == json.loads((builder.MOD / "_metadata/modinfo.json").read_text())
+        assert info["authors"] == [{"name": "Ashcutus", "role": "CREATOR"}]
+        assert info["summary"] == "View, track and manage offered, active and completed subsidies in one place."
+        assert info["description"].startswith("Never lose track of a subsidy again.")
+        assert info["url"] == "https://github.com/Ashcutus/Transport-Fever-3-Subsidy-Tracker"
         assert "version" not in info and "platforms" not in info
         assert set(info["tags"]) == {"Misc", "Script Mod"}
         notice = package.read(prefix + "license.txt")
