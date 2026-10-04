@@ -2,7 +2,7 @@
     "en": {
         "copilot_subsidy_manager_title": "Subsidy Manager",
         "copilot_subsidy_manager_button": "Subsidies",
-        "copilot_subsidy_manager_button_tooltip": "Open Subsidy Manager",
+        "copilot_subsidy_manager_button_tooltip": "Subsidy Manager",
         "copilot_subsidy_manager_active": "In Progress",
         "copilot_subsidy_manager_offered": "Offered",
         "copilot_subsidy_manager_history": "History",
@@ -12,7 +12,7 @@
         "copilot_subsidy_manager_no_active": "No active subsidies.",
         "copilot_subsidy_manager_no_offers": "No offered subsidies.",
         "copilot_subsidy_manager_no_history": "No completed or failed subsidies.",
-        "copilot_subsidy_manager_completed": "Completed",
+        "copilot_subsidy_manager_completed": "Successful",
         "copilot_subsidy_manager_failed": "Failed",
         "copilot_subsidy_manager_debug_source": "Subsidy state source: %s",
         "copilot_subsidy_manager_read_error": "Unable to read subsidy state. Try Refresh; see the game log for details.",
