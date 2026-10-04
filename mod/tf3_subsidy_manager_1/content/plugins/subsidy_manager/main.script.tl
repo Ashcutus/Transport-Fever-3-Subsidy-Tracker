@@ -37,7 +37,7 @@ local function readSnapshot() : Snapshot
 		if not component then return end
 
 		local state = component.state as SubventionState
-		if state.proposedSubventions == nil or state.activeSubventions == nil then return end
+		if not state or state.proposedSubventions == nil or state.activeSubventions == nil then return end
 
 		snapshot.stateFound = true
 		snapshot.scriptName = component.gameScript
