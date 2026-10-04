@@ -15,7 +15,7 @@ local stateIndex, reads = 0, 0
 local component, entity, exists, readFailure = nil, 123, true, false
 local visible, mounted, added = true, false, 0
 local translations = {
-    copilot_subsidy_manager_progress = "%g / %g transported  |  %.0f%%",
+    tf3_subsidy_manager_progress = "%g / %g transported  |  %.0f%%",
 }
 local function translate(key)
     assert(type(key) == "string")
@@ -25,10 +25,22 @@ local windowRecipe, managerTool
 local events, replacements = {}, {}
 local gameBar = { GameBar = function(params) return {kind = "GameBar", params = params} end }
 local react = {}
-function react.RegisterRecipe(_, fn) return fn end
+function react.RegisterRecipe(_, fn)
+    return function(...)
+        local node = fn(...)
+        assert(node.kind == "BoxLayout" or node.kind == "FloatingLayout", "Recipe child must be a layout")
+        return node
+    end
+end
 function react.CallOriginalRecipe(fn, params) return fn(params) end
 function react.fireEvent(_, name, params) events[#events + 1] = {name = name, params = params} end
-function react.RegisterWrapperRecipe(_, _, fn) windowRecipe = fn; return fn end
+function react.RegisterWrapperRecipe(name, wrapped, fn)
+    if name == "TF3SubsidyManagerWindow" then windowRecipe = fn end
+    if name == "TF3SubsidyManagerGameBar" then
+        assert(wrapped == gameBar.GameBar, "GameBar wrapper must preserve the native recipe metadata")
+    end
+    return fn
+end
 local function state(value)
     return {value = value, old = function(self) return self.value end,
         set = function(self, nextValue) self.value = nextValue end}
@@ -148,32 +160,32 @@ clickTab(tree, 2)
 assert(texts(content(render()).children[1]):find("offer", 1, true))
 clickTab(tree, 3)
 tree = render()
-assert(texts(content(tree).children[1]):find("copilot_subsidy_manager_completed", 1, true))
-assert(texts(content(tree).children[2]):find("copilot_subsidy_manager_failed", 1, true))
+assert(texts(content(tree).children[1]):find("tf3_subsidy_manager_completed", 1, true))
+assert(texts(content(tree).children[2]):find("tf3_subsidy_manager_failed", 1, true))
 
 for _, value in ipairs({false, {}, {state = 7},
     {state = {proposedSubventions = {}, activeSubventions = false}},
     {state = {proposedSubventions = {}, activeSubventions = {}, failedSubventions = 42}}}) do
     reset(value)
-    assert(content(render()).text == "copilot_subsidy_manager_unavailable")
+    assert(content(render()).text == "tf3_subsidy_manager_unavailable")
 end
 reset(nil)
-assert(content(render()).text == "copilot_subsidy_manager_unavailable")
+assert(content(render()).text == "tf3_subsidy_manager_unavailable")
 reset(validState()); entity = nil
-assert(content(render()).text == "copilot_subsidy_manager_unavailable")
+assert(content(render()).text == "tf3_subsidy_manager_unavailable")
 reset(validState()); exists = false
-assert(content(render()).text == "copilot_subsidy_manager_unavailable")
+assert(content(render()).text == "tf3_subsidy_manager_unavailable")
 reset(validState()); readFailure = true
 tree = render()
-assert(content(tree).text == "copilot_subsidy_manager_read_error")
+assert(content(tree).text == "tf3_subsidy_manager_read_error")
 assert(warnings[#warnings]:find("engine not ready", 1, true))
 readFailure = false; refresh(tree)
 assert(texts(content(render()).children[1]):find("active", 1, true))
 reset({state = {proposedSubventions = {}, activeSubventions = {}}})
 tree = render()
-assert(content(tree).text == "copilot_subsidy_manager_no_active")
+assert(content(tree).text == "tf3_subsidy_manager_no_active")
 clickTab(tree, 3)
-assert(texts(content(render()).children[1]) == "copilot_subsidy_manager_no_history")
+assert(texts(content(render()).children[1]) == "tf3_subsidy_manager_no_history")
 reset({state = {proposedSubventions = {}, activeSubventions = {
     false, {}, {data = false}, record("", nil, nil), record("decimal", 1.5, 3),
     record("negative", -1, 10), record("infinite", math.huge, 10), record("nan", 0/0, 10),
@@ -257,7 +269,7 @@ local pair = builtin.ToolButton(ref, industry)
 assert(toolCalls[#toolCalls - 1][1] == ref and toolCalls[#toolCalls - 1][2] == industry)
 assert(pair.children[1] == industry, "native industry button replaced")
 local button = pair.children[2]
-assert(button.meta.tooltip == "copilot_subsidy_manager_button_tooltip")
+assert(button.meta.tooltip == "tf3_subsidy_manager_button_tooltip")
 assert(button.toolStack == industry.toolStack and button.toolDefinition == managerTool)
 assert(button.content.path:find("contract_26.tga", 1, true))
 assert(added == 0, "window created persistently before user opens it")

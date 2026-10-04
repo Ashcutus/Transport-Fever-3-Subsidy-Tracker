@@ -1,6 +1,6 @@
 {
-    "modId": "copilot_subsidy_manager",
-    "revision": 5,
+    "modId": "tf3_subsidy_manager",
+    "revision": 6,
     "severityAdd": "None",
     "severityRemove": "None",
     "cosmetic": true,
