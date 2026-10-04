@@ -8,7 +8,7 @@ This repository contains a small, read-only Transport Fever 3 mod proof of conce
 
 - TF3 mods are directories with a `mod.json` manifest and resource files. The installed game includes Teal definitions and shipped mods; the official manual's [introduction](https://wiki.transportfever3.com/doku.php?id=modding:introduction) says mods are directory-based and warns against editing installation files.
 - The official [scripting reference](https://wiki.transportfever3.com/script-doc/) documents `api.engine` as read-only access to the engine state from both GUI and engine script states. It exposes `forEachEntityWithComponent`, `getComponent`, `ComponentType.GAME_SCRIPT`, and `Engine.Component.GameScript<T>.state`.
-- TF3's public engine API exposes `api.engine.system.gameScriptSystem.getEntityForGameScript(name)`. The POC instead enumerates game-script components and identifies the subsidy state by its typed fields, so it does not need to guess the built-in script's resource name.
+- TF3's public engine API exposes `api.engine.system.gameScriptSystem.getEntityForGameScript(name)`. The POC uses that accessor with `::/game_mechanics/subventions/subventions.gs`, the same resource name used by the installed base-game subsidy UI. `GAME_SCRIPT` can be read by entity, but TF3 rejects enumeration of that component type.
 - The installed base type file `base/tealdef/game_mechanics/subventions/subvention.d.tl` defines `SubventionState` with `proposedSubventions`, `activeSubventions`, `completedSubventions`, and `failedSubventions`. A subsidy record includes status and timestamps; its data includes name, expiry durations, required quantity, delivered quantity, and upfront/completion/failure effects. Effects can be Money, Reputation, or TownExperience.
 - The built-in UI types also define card data for description, deadline, progress, locations, cargo icons, and effects. A current community mod, [TF3 Minimap](https://github.com/schbrongx/tf3mod-minimap), demonstrates a bottom mod-button-area plugin, `builtin.Window`, a `ModEntryPointExtension`, and the current React GUI resource layout.
 - `api.gui.game.getGuiSaveData(modId)` and `setGuiSaveData(modId, data)` are documented. They are suitable for mod-owned GUI preferences persisted with a save. The game's own script state is also part of save state.
@@ -26,6 +26,8 @@ This repository contains a small, read-only Transport Fever 3 mod proof of conce
 ## Proof of Concept
 
 The three tabs display in-progress, offered, and history records from the game's current subsidy state. Each row shows the subsidy name and transported/required count. Use Refresh to reread state. Empty and unavailable states are explicit. No synthetic subsidy examples are generated.
+
+The initial read runs once per window instance; switching tabs does not reread engine state. Refresh copies the display fields into a new snapshot. Missing script/state shows the unavailable message; a failed read shows an error in the window and logs the cause, with Refresh available to retry. Incomplete record fields show an unnamed subsidy or unavailable progress.
 
 The mod only reads engine component state. The button and window do not issue simulation commands or write subsidy data. Debug logging is off by default; set `DEBUG_LOGGING` to `true` in `content/plugins/subsidy_manager/main.script.tl` during development.
 
@@ -47,6 +49,14 @@ Disable the mod in the save's mod list, exit the game, and remove the `tf3_subsi
 
 ## Development Checks
 
-The game compiles `.tl` scripts when loading mods. For editor-side type checking, set `TF3_INSTALL_DIR` to the TF3 install directory and use the included `tlconfig.lua` with Teal (`tl`). The `.res.lua` files can be checked with `luac -p`.
+The game compiles `.tl` scripts when loading mods. For editor-side type checking, run from `mod/tf3_subsidy_manager_1`, set `TF3_INSTALL_DIR` to the TF3 install directory, and use the included `tlconfig.lua` and `all_def.d.tl` with Teal (`tl`). TF3 extends the upstream Teal definitions (including React metadata), so upstream checking may report framework compatibility errors; the game remains the authoritative compiler. The `.res.lua` files can be checked with `luac -p`.
 
-An in-game verification still needs to confirm mod loading, button/window visibility, and state reads in a save containing subsidies. If the window reports that no readable subsidy state was found, retain that exact save/log result before broadening the field matching.
+Run the mocked regression checks from the repository root with Lua 5.3+ and a Teal source checkout:
+
+```sh
+TEAL_DIR=/path/to/tl lua5.4 tests/subsidy_manager_test.lua
+```
+
+The harness transpiles the actual mod script, rejects Teal syntax errors, and exercises the plugin recipes against mocked engine and React APIs. It covers named script lookup without enumeration, missing/invalid state, read failure and retry, snapshot isolation, lazy initialization, all tabs (including populated history), incomplete/nonfinite progress, delayed native window mounting, and button toggling. It does not replace the game's compiler or UI runtime.
+
+In-game verification still needs to confirm mod loading, button/window visibility, and state reads in a save containing subsidies. If the window reports that no readable subsidy state was found, retain that exact save/log result before broadening the field matching.
