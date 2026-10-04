@@ -90,6 +90,22 @@ for _, group in ipairs({"statistics", "notifications", "menu"}) do
 end
 assert(8 * buttons.statistics + 7 * 10 <= 7 * 26 + 6 * 10, "Eight buttons must fit original seven-button logical row")
 assert(buttons.statistics < 26 and buttons.statistics >= 20, "Reduce logical size, not physical @2x asset dimensions")
+-- Badge rules affect only the manager's floating content, never toolbar allocation.
+local badgeIcon, badgeDot, badgeText
+for _, rule in ipairs(list) do
+    local levels, style = rule.levels, rule.styleSheet
+    if #levels >= 2 and levelMatches(levels[2], nil, "tf3-subsidy-toolbar-icon") or
+        (#levels >= 2 and levelMatches(levels[2], nil, "tf3-subsidy-offer-badge")) then
+        assert(levels[1].id == "tf3-subsidy-manager.button", "Badge styles must be scoped to the manager")
+        assert(not style.transform and not style.backgroundImage1 and not style.highlightMask)
+        if #levels == 2 and levelMatches(levels[2], nil, "tf3-subsidy-toolbar-icon") then badgeIcon = style end
+        if #levels == 2 and levelMatches(levels[2], nil, "tf3-subsidy-offer-badge") then badgeDot = style end
+        if #levels == 3 and levels[3].element == "TextView" then badgeText = style end
+    end
+end
+assert(badgeIcon.size[1] == buttons.statistics and badgeIcon.size[2] == buttons.statistics)
+assert(badgeDot.size[1] == 8 and badgeDot.size[2] == 8 and badgeDot.maxSize[1] == 8)
+assert(badgeText.color and badgeText.fontSize and badgeDot.size[1] < badgeIcon.size[1])
 -- Mutation checks: explicitly missing either native requirement is rejected.
 local missingTable = {}; for _, rule in ipairs(list) do
     if not (#rule.levels == 2 and rule.levels[2].element == "Table::Layout") then missingTable[#missingTable + 1] = rule end
