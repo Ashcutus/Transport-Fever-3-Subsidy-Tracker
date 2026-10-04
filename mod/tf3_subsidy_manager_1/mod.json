@@ -1,6 +1,6 @@
 {
     "modId": "copilot_subsidy_manager",
-    "revision": 2,
+    "revision": 3,
     "severityAdd": "None",
     "severityRemove": "None",
     "cosmetic": true,
