@@ -1,6 +1,6 @@
-# TF3 Subsidy Manager: Investigation and Proof of Concept
+# TF3 Subsidy Manager — v0.1 Native UI
 
-This repository contains a small, read-only Transport Fever 3 mod proof of concept. It adds a native-style Subsidies button, opens a movable game window, and reads the subsidy lists already attached to a game-script component. It does not accept, decline, edit, or otherwise change subsidies.
+This repository contains a small, read-only Transport Fever 3 mod proof of concept. It adds a small Subsidy Manager button beside Industry Statistics in the bottom-right toolbar, opens a movable game window, and consolidates the subsidy lists already attached to a game-script component. It does not accept, decline, edit, or otherwise change subsidies.
 
 ## Phase 1: Investigation
 
@@ -19,17 +19,35 @@ This repository contains a small, read-only Transport Fever 3 mod proof of conce
 - The subsidy records and their lifecycle implementation are in `base/tealdef`, not in the public `api/tealdef` package. The engine accessor is officially read-only, but subsidy field names are base-game contracts and could change between game updates. The mod therefore guards for missing state and performs no writes.
 - The base subsidy type declares lifecycle callbacks (`onAccept`, `onUpdate`, `onComplete`, `onFailure`), but there is no documented external-mod subscription hook for those callbacks. This POC uses an explicit Refresh control rather than adding a polling loop.
 - The state shape has completed and failed collections, but the shipped type declarations alone do not establish how long those collections are retained. The POC displays records still present in those lists; long-term history retention needs in-game verification across completion, failure, save/reload, and multiple versions.
-- The POC does not infer missing rewards, locations, or failure reasons. A later implementation can use the base `SubventionCardData` helpers if their use from external GUI mods is validated in-game.
+- The manager does not infer missing rewards, locations, or failure reasons. It dispatches each real record through its shipped `getCardData` helper; failures are logged per record and preserve the other rows.
 - No supported direct-acceptance API was found. There is no acceptance action in this POC; use the game's normal subsidy interface.
-- The bottom-bar plugin extension point is demonstrated by a working community mod, but the official manual does not document the React plugin extension system in detail. It depends on TF3's shipped GUI modules and should be rechecked after game updates.
+- The shipped statistics tray has no dedicated mod extension point. The integration below depends on undocumented shipped GUI modules and must be rechecked after game updates.
 
-## Proof of Concept
+## Using the Manager
 
-The three tabs display in-progress, offered, and history records from the game's current subsidy state. Each row shows the subsidy name and transported/required count. Use Refresh to reread state. Empty and unavailable states are explicit. No synthetic subsidy examples are generated.
+Click **Subsidy Manager** beside **Industry Statistics** to open or close the native, movable window. Choose **In Progress**, **Offered**, or **History**, and use **Refresh** to reread the save. History distinguishes **Successful** and **Failed**. The list scrolls within the manager. No persistent launcher occupies the viewport.
 
-The initial read runs once per window instance; switching tabs does not reread engine state. Refresh copies the display fields into a new snapshot. Missing script/state shows the unavailable message; a failed read shows an error in the window and logs the cause, with Refresh available to retry. Incomplete record fields show an unnamed subsidy or unavailable progress.
+Rows show the real title, cargo/passenger icons and quantity, available locations, native effect text, and appropriate remaining time. Active records show transported/required counts in a native progress bar. Successful history shows completion effects; failed history shows the failure effects exposed by TF3. Missing card data leaves a defensive name/progress fallback rather than inventing information.
 
-The mod only reads engine component state. The button and window do not issue simulation commands or write subsidy data. Debug logging is off by default; set `DEBUG_LOGGING` to `true` in `content/plugins/subsidy_manager/main.script.tl` during development.
+Select a formatted row to open TF3's existing subsidy detail window. The game supplies the description, task, locations, money, income multipliers, durations, and other supported effects. Offered records expose the game's normal Accept/Decline controls there; the mod implements neither action. Native details may take over the active tool, just as when selected from vanilla subsidy notifications.
+
+There is **no default shortcut** and no custom keyboard listener. F9 remains TF3's Screenshot action (`IA_GAME_SCREENSHOT`), confirmed in the installed user key definitions. Esc and other vanilla shortcuts use TF3's normal input routing.
+
+The initial read runs once per manager window instance; switching tabs does not reread engine state. Refresh copies records and card data into a detached snapshot. Reopening the manager creates a fresh snapshot. No subsidy polling or persistent history database is added. Empty and unavailable states are explicit; a failed state read logs its cause and leaves Refresh available to retry.
+
+## Native Integration Evidence
+
+Implementation was checked against the installed TF3 resources, extracted to temporary files for inspection. No installation files were modified.
+
+- `gui/game_bar/game_bar.tl`: `GameBarMenuRight` builds Industry Statistics (`menu.industry-statistics.button`, `IA_SELECT_STATISTICS_INDUSTRIES`) in its horizontal statistics group using `builtin.ToolButton`. `MainModButtonAreaExtension` belongs to a separate mod area, so its old launcher resources were removed.
+- `gui/main/bootstrap_game.tl`: loads `react-replacement-config` resources before React initialization. The mod uses this mechanism to wrap the exported `GameBar` recipe, preserving it with `react.CallOriginalRecipe` and retaining its game context.
+- **Undocumented integration:** during that bootstrap callback, the mod wraps the shared `builtin.ToolButton` module function and adds a sibling only when the metadata ID is Industry Statistics. All original arguments, refs, and native button properties pass through. This avoids copying the vanilla toolbar implementation, but can conflict with mods replacing the same module/recipe. There is no public statistics-tray plugin API in this build.
+- `gui/game_bar/game_bar.css.lua`: native ToolButton selectors supply the circular surface, hover/pressed/checked behavior and icon sizing. A mod-owned white contract/reward icon has the same 52×52 `@2x` asset size as the native 26-unit statistics icons. The small stylesheet uses the shipped 10-unit spacing and extends the native tray's minimum width by one icon plus gap; layout and stylesheet units follow UI scaling, with no screen-positioned launcher.
+- `gui/main/tool_react_util.tl`: `registerToolWithWindow` owns creation, closing, shelving, and removal through the existing tool stack. Closing removes the manager instead of retaining the POC's hidden singleton. This addresses the potential input/focus interference from the old lifecycle without intercepting Esc or replacing the pause menu. The reported Esc failure had no accompanying Lua error in the inspected log; its resolution still requires an in-game input check.
+- `game_mechanics/subventions/subventions_gui.tl`: dispatches `SubventionDesc.scriptFile .. ".getCardData"` via `util.useFn`. The manager uses the same full-card dispatch, on detached records because legacy helpers can migrate fields. Shipped helpers format money, other effects, income multipliers and durations. Offered summaries use `spawnTime + expireDurationProposed` (the shipped `defaultTimeout` contract) with `util.formatDurationWithCurrentCalenderSpeed`; vanilla card deadlines describe the task duration instead.
+- `game_mechanics/notifications/types/subvention*.script.tl` and `gui/entity_window/make_non_entity_window.tl`: the manager fires the same `selectViewKey` event with `subsidy_<uid>` and the real detached record to open the vanilla detail. It does not copy the vanilla card or issue simulation commands.
+
+TF3 removes completed records when their bonus expires in the inspected lifecycle code. History only displays records still retained by the game. Actual retention through failure, bonus expiry, and save/reload needs gameplay verification.
 
 ## Installation
 
@@ -57,6 +75,8 @@ Run the mocked regression checks from the repository root with Lua 5.3+ and a Te
 TEAL_DIR=/path/to/tl lua5.4 tests/subsidy_manager_test.lua
 ```
 
-The harness transpiles the actual mod script, rejects Teal syntax errors, and exercises the plugin recipes against mocked engine and React APIs. It covers named script lookup without enumeration, missing/invalid state, read failure and retry, snapshot isolation, lazy initialization, all tabs (including populated history), incomplete/nonfinite progress, delayed native window mounting, and button toggling. It does not replace the game's compiler or UI runtime.
+The harness transpiles the actual mod script, rejects Teal syntax errors, and exercises the plugin recipes against mocked engine and React APIs. It covers named script lookup without enumeration, missing/invalid state, read failure and retry, snapshot isolation (including legacy helper writes), lazy initialization, all tabs, incomplete/nonfinite progress, complex native effect text, offer expiry, detail dispatch, toolbar argument forwarding, and tool close lifecycle. It does not replace the game's compiler or UI runtime.
 
-In-game verification still needs to confirm mod loading, button/window visibility, and state reads in a save containing subsidies. If the window reports that no readable subsidy state was found, retain that exact save/log result before broadening the field matching.
+The upstream Teal checker does not model TF3's injected React `meta` parameters. Diagnostics about `meta` on native Button/BoxLayout/ToolButton calls are framework metadata compatibility errors, also present in shipped UI code; they are separate from syntax or ordinary mod type failures. The game remains the authoritative compiler.
+
+Revision 5 still needs real in-game validation: load a real save without UI recovery errors; check toolbar placement/appearance at multiple UI scales and resolutions; toggle/close/reopen the manager; test Esc with the manager closed and open, F9 screenshots, F8 Industry Statistics, and other vanilla shortcuts; inspect active/offered/completed/failed rows and native details (especially money plus an income multiplier); test normal vanilla acceptance; and check history after save/reload and reward expiry. Mocked checks do not establish these runtime/visual acceptance criteria.
