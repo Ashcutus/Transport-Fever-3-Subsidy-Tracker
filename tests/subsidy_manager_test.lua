@@ -409,7 +409,7 @@ local workers = record("Transport Workers", nil, nil)
 workers.id, workers.uid = workerSubsidyId, 74
 component.state.activeSubventions = {workers}
 tree = render()
-for _, case in ipairs({{0, "0% Workers"}, {0.125, "12.5% Workers"}, {0.6, "60% Workers"}, {1, "100% Workers"}}) do
+for _, case in ipairs({{0.0, "0% Workers"}, {0.125, "12.5% Workers"}, {0.6, "60% Workers"}, {1.0, "100% Workers"}}) do
     workers.data.nativeProgress = {value = case[1], text = "Workers"}
     refresh(tree); tree = render()
     local cell = content(tree).children[1].children[4].children[1]
@@ -418,14 +418,14 @@ for _, case in ipairs({{0, "0% Workers"}, {0.125, "12.5% Workers"}, {0.6, "60% W
     assert(cell.meta.tooltip == case[2])
     assert(workers.data.delivered == nil and workers.data.toDeliver == nil and workers.data.migrated == nil)
 end
-for _, invalidProgress in ipairs({{}, {value = 0.6}, {value = "0.6", text = "Workers"},
+for _, invalidProgress in ipairs({{}, {value = 0.6}, {text = "Workers"}, {value = false, text = "Workers"}, {value = "0.6", text = "Workers"},
     {value = -0.1, text = "Workers"}, {value = 1.1, text = "Workers"},
     {value = math.huge, text = "Workers"}, {value = -math.huge, text = "Workers"}, {value = 0/0, text = "Workers"}}) do
     workers.data.nativeProgress = invalidProgress
     refresh(tree); tree = render()
     local cell = content(tree).children[1].children[4]
     assert(cell.children[1].content.layout.children[1].kind == "TextView")
-    assert(texts(cell) == "tf3_subsidy_manager_unknown_progress")
+    assert(texts(cell) == (invalidProgress.text or "tf3_subsidy_manager_unknown_progress"))
 end
 workers.data.nativeProgress = nil
 refresh(tree); tree = render()
