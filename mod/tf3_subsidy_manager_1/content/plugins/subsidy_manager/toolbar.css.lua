@@ -15,6 +15,11 @@ function data()
         R::GameBarMenuRight !notifications ToolButton ImageView,
         R::GameBarMenuRight !menu ToolButton ImageView]], { size = { trayButtonSize, trayButtonSize } })
     a("R::GameBarMenuRight !tf3-subsidy-tray-pair", { innerSpacing = { 10, 0 } })
+    a("#tf3-subsidy-manager.button !tf3-subsidy-toolbar-icon", { size = { trayButtonSize, trayButtonSize } })
+    a("#tf3-subsidy-manager.button !tf3-subsidy-toolbar-icon FloatingLayout", { gravity = { -1, -1 } })
+    -- Floating overlay: no row allocation or changes to native button state surfaces.
+    a("#tf3-subsidy-manager.button !tf3-subsidy-offer-badge", { size = { 8, 8 }, minSize = { 8, 8 }, maxSize = { 8, 8 } })
+    a("#tf3-subsidy-manager.button !tf3-subsidy-offer-badge TextView", { fontSize = 10, color = { 1, 0.8, 0.2, 1 }, gravity = { 0.5, 0.5 } })
 
     a("#tf3-subsidy-manager.window", { size = { 1180, 640 }, minSize = { 1180, 640 }, maxSize = { 1180, 640 } })
     -- Empty snapshots use a compact preset; populated snapshots keep revision 9 dimensions.

@@ -3,11 +3,122 @@ local builtin = ug_require "::/gui/main/builtin.lua" as Builtin
 local util = ug_require "::/scripts/util.tl" as Util
 local toolUtil = ug_require "::/gui/main/tool_react_util.tl" as ToolReactUtil
 local gameBar = ug_require "::/gui/game_bar/game_bar.tl" as GameBar
+local engineReactUtil = ug_require "::/gui/main/engine_react_util.tl" as EngineReactUtil
 
 local WINDOW_ID = "tf3-subsidy-manager.window"
 local DEBUG_LOGGING = false
 
 local SUBVENTION_SCRIPT = "::/game_mechanics/subventions/subventions.gs"
+local MOD_ID = "tf3_subsidy_manager"
+local OFFERS_OPENED_EVENT = "tf3SubsidyManagerOffersOpened"
+
+local record OfferBadgeState
+	initialized : boolean
+	offers : {string : boolean}
+	pending : boolean
+	dirty : boolean
+end
+
+local function offerIdentity(record : ISubvention) : string
+	if type(record) ~= "table" or type(record.id) ~= "string" or record.id == "" then return nil end
+	if type(record.uid) ~= "number" or record.uid < 0 or record.uid >= math.huge or record.uid ~= math.floor(record.uid) then return nil end
+	if type(record.spawnTime) ~= "number" or not (math.abs(record.spawnTime) < math.huge) then return nil end
+	return string.format("%d:%s|%.17g|%.17g", #record.id, record.id, record.uid, record.spawnTime)
+end
+
+local function queryOfferIdentities() : {string : boolean}
+	local entity = api.engine.system.gameScriptSystem.getEntityForGameScript(SUBVENTION_SCRIPT)
+	if not entity or not api.engine.entityExists(entity) then return nil end
+	local component = api.engine.getComponent(entity, api.type.ComponentType.GAME_SCRIPT) as Engine.Component.GameScript<SubventionState>
+	if not component or type(component.state) ~= "table" or type(component.state.proposedSubventions) ~= "table" then return nil end
+	local offers : {string : boolean} = {}
+	-- Read only identity fields; never format cards or copy other subsidy collections.
+	for _index, record in ipairs(component.state.proposedSubventions) do
+		local key = offerIdentity(record)
+		if key then offers[key] = true end
+	end
+	return offers
+end
+
+local function loadOfferBadge() : OfferBadgeState
+	local initial : OfferBadgeState = { initialized = false, offers = {}, pending = false, dirty = false }
+	local ok, saved = pcall(function() : any return api.gui.game.getGuiSaveData(MOD_ID) end)
+	if not ok or type(saved) ~= "table" then return initial end
+	local badge = (saved as table).offerBadge as table
+	if type(badge) ~= "table" or badge.version ~= 1 or type(badge.pending) ~= "boolean" or type(badge.offers) ~= "table" then return initial end
+	local offers : {string : boolean} = {}
+	for key, value in pairs(badge.offers as {any : any}) do
+		if type(key) ~= "string" or value ~= true then return initial end
+		offers[key as string] = true
+	end
+	return { initialized = true, offers = offers, pending = badge.pending as boolean, dirty = false }
+end
+
+local function saveOfferBadge(badge : OfferBadgeState) : boolean
+	-- Keep other mod-owned GUI fields intact. Persistence failure must not break UI.
+	local ok = pcall(function()
+		local saved = api.gui.game.getGuiSaveData(MOD_ID)
+		local data : {any : any} = {}
+		if type(saved) == "table" then
+			for key, value in pairs(saved) do data[key] = value end
+		end
+		local offers : {string : boolean} = {}
+		for key, value in pairs(badge.offers) do offers[key] = value end
+		data.offerBadge = { version = 1, offers = offers, pending = badge.pending }
+		api.gui.game.setGuiSaveData(MOD_ID, data)
+	end)
+	return ok
+end
+
+local OfferBadgeIcon = react.RegisterWrapperRecipe("TF3SubsidyManagerOfferBadgeIcon", builtin.Component, function(_params : Builtin.ComponentParam) : TreeNodeId
+	local tracked : ReactRefT<OfferBadgeState> = react.useRefLazy(loadOfferBadge)
+	local pending : ReactStateT<boolean> = engineReactUtil.useStepStateTimer(function() : boolean
+		local badge = tracked:get()
+		local ok, result = pcall(queryOfferIdentities)
+		if not ok or not result then return badge.pending end
+		local offers = result as {string : boolean}
+		local changed = not badge.initialized
+		for key, _value in pairs(offers) do
+			if not badge.offers[key] then
+				if badge.initialized then badge.pending = true end
+				changed = true
+			end
+		end
+		for key, _value in pairs(badge.offers) do if not offers[key] then changed = true end end
+		badge.initialized, badge.offers = true, offers
+		if changed or badge.dirty then badge.dirty = not saveOfferBadge(badge) end
+		return badge.pending
+	end, 5)
+	react.onEvent(OFFERS_OPENED_EVENT, function(_name : string, data : any)
+		if type(data) ~= "table" then return end
+		local offers : {string : boolean} = {}
+		for key, value in pairs(data as {any : any}) do
+			if type(key) ~= "string" or value ~= true then return end
+			offers[key as string] = true
+		end
+		local badge = tracked:get()
+		badge.initialized, badge.offers, badge.pending = true, offers, false
+		badge.dirty = not saveOfferBadge(badge)
+		pending:set(false)
+	end)
+	local children : {TreeNodeId} = {
+		builtin.FloatingLayoutChild { item = builtin.ImageView { path = "tf3_subsidy_manager::/plugins/subsidy_manager/icons/contract_26.tga" } },
+	}
+	if pending:old() then
+		children[#children + 1] = builtin.FloatingLayoutChild {
+			-- Shipped builtin.lua uses this enum; the installed Teal field still says boolean.
+			h = 1.3, v = -0.3, overflowMode = builtin.type.FloatingLayoutOverflowMode.Overflow as boolean,
+			item = builtin.Component {
+				meta = { class = "tf3-subsidy-offer-badge" }, mouseTransparent = true,
+				layout = builtin.BoxLayout { children = { builtin.TextView { text = "●" } } },
+			},
+		}
+	end
+	return builtin.Component {
+		meta = { class = "tf3-subsidy-toolbar-icon" }, mouseTransparent = true,
+		layout = builtin.FloatingLayout { children = children },
+	}
+end)
 
 local record Entry
 	name : string
@@ -195,6 +306,10 @@ local function countText(item : Entry) : string
 	return _("tf3_subsidy_manager_unknown_progress")
 end
 
+local function isTransportWorkers(item : Entry) : boolean
+	return item.recordCopy ~= nil and item.recordCopy.id == "::/game_mechanics/subventions/deliver_workers/deliver_workers.res"
+end
+
 local function columnText(item : Entry, key : string) : string
 	local card = item.card
 	if key == "type" then return item.name end
@@ -205,7 +320,14 @@ local function columnText(item : Entry, key : string) : string
 		return type(required) == "number" and required >= 0 and required < math.huge and tostring(required) or "—"
 	end
 	if key == "progress" or key == "result" then
-		if key == "progress" and card and card.progress and type(card.progress.value) == "number" and card.progress.value >= 0 and card.progress.value < math.huge and type(card.progress.text) == "string" then return card.progress.text end
+		if key == "progress" and card and card.progress and type(card.progress.value) == "number" and card.progress.value >= 0 and card.progress.value < math.huge and type(card.progress.text) == "string" then
+			if isTransportWorkers(item) then
+				-- Native value is normalized workforce progress toward the industry boost, not a worker count.
+				if card.progress.value > 1 then return countText(item) end
+				return string.format("%g%% %s", card.progress.value * 100, card.progress.text)
+			end
+			return card.progress.text
+		end
 		return countText(item)
 	end
 	if key == "destination" and card and card.location then
@@ -247,7 +369,7 @@ local function makeCell(key : string) : Recipe<Builtin.TableCellParam>
 				scaling = builtin.type.ImageViewScaling.AutoFit,
 			}
 		end
-		if item and key == "progress" and item.card and item.card.progress and type(item.card.progress.value) == "number" and item.card.progress.value >= 0 and item.card.progress.value < math.huge and type(item.card.progress.text) == "string" then
+		if item and key == "progress" and item.card and item.card.progress and type(item.card.progress.value) == "number" and item.card.progress.value >= 0 and item.card.progress.value < math.huge and type(item.card.progress.text) == "string" and (not isTransportWorkers(item) or item.card.progress.value <= 1) then
 			-- Some native tasks report a qualitative label (e.g. Workers), not counts.
 			parts[#parts + 1] = builtin.ProgressBar { value = math.min(1, item.card.progress.value), label = text }
 		else
@@ -308,6 +430,16 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 		generation:set(generation:old() + 1)
 	end
 	local current = snapshot:old()
+	-- Acknowledge only after successful mounting, never merely on the toolbar click.
+	react.onMount(function()
+		if not current.stateFound or current.readError then return end
+		local offers : {string : boolean} = {}
+		for _index, item in ipairs(current.offered) do
+			local key = offerIdentity(item.recordCopy)
+			if key then offers[key] = true end
+		end
+		react.fireEvent(nil, OFFERS_OPENED_EVENT, offers)
+	end)
 	local section = selectedTab:old()
 	local history : {Entry} = {}
 	for _index, item in ipairs(current.completed) do history[#history + 1] = item end
@@ -426,7 +558,7 @@ local function installToolbar(_replacementApi : ReactReplacementApi)
 					},
 					toolDefinition = ManagerTool,
 					toolStack = params.toolStack,
-					content = builtin.ImageView { path = "tf3_subsidy_manager::/plugins/subsidy_manager/icons/contract_26.tga" },
+					content = OfferBadgeIcon {},
 					showFn = function()
 						gameCtx.toolStack:get():getApi().push(ManagerTool, nil, { gameCtx = gameCtx }, true)
 					end,

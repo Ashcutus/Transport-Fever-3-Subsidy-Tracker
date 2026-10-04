@@ -9,7 +9,7 @@ local source = file:read("*a")
 file:close()
 
 local function check(code, expectWrapper)
-    local registry = {builtin = {Window = 1, ToolButton = 2, BoxLayout = 3, ImageView = 4, FloatingLayout = 5, WithComponentParams = 6, Button = 7, Component = 8, TextView = 9, ProgressBar = 10},
+    local registry = {builtin = {Window = 1, ToolButton = 2, BoxLayout = 3, ImageView = 4, FloatingLayout = 5, WithComponentParams = 6, Button = 7, Component = 8, TextView = 9, ProgressBar = 10, FloatingLayoutChild = 11},
         recipes = {}, recipeMetas = {}, originalRecipeFn = {}, recipeReplace = {}, tools = {}, recipeReplacementAllowed = true}
     local ids, nextRecipeId, nodes, nextNodeId = {}, 100, {}, 0
     local nativeParams = {}
@@ -27,7 +27,7 @@ local function check(code, expectWrapper)
         ug_require = function(path) assert(path == "/scripts/util.tl"); return {} end,
     }, {__index = _G})
     local react = assert(loadfile(reactPath, "t", reactEnv))()
-    local builtin = {type = {Orientation = {Horizontal = 1}, ImageViewScaling = {AutoFit = 1}}}
+    local builtin = {type = {Orientation = {Horizontal = 1}, ImageViewScaling = {AutoFit = 1}, FloatingLayoutOverflowMode = {Overflow = 1}}}
     for name in pairs(registry.builtin) do builtin[name] = react.DeclareBuiltin(name, function() end) end
     local originalGameBar = react.RegisterRecipe("GameBar", function() return builtin.FloatingLayout {} end)
     local modEnv = setmetatable({api = nativeApi, log = logger, _ = function(key) return key end,
@@ -35,6 +35,12 @@ local function check(code, expectWrapper)
             if path:find("/main/react.lua", 1, true) then return react end
             if path:find("/main/builtin.lua", 1, true) then return builtin end
             if path:find("/game_bar/game_bar.tl", 1, true) then return {GameBar = originalGameBar} end
+            if path:find("engine_react_util", 1, true) then
+                return {useStepStateTimer = function(_, interval)
+                    assert(interval == 5)
+                    return {old = function() return true end, set = function() end}
+                end}
+            end
             if path:find("/main/tool_react_util.tl", 1, true) then
                 return {registerToolWithWindow = function(name) return {name = name} end}
             end
@@ -93,6 +99,22 @@ local function check(code, expectWrapper)
     context.currentRecipeId = originalId
     registry.recipes[originalId](context, originalNode.props)
     assert(nodes[context.result[1]].recipeId == registry.builtin.FloatingLayout)
+    -- Badge wrapper must return a Component; its FloatingLayout owns widget children.
+    local badgeId = assert(ids.TF3SubsidyManagerOfferBadgeIcon)
+    assert(registry.recipeMetas[badgeId].innerRecipeId == registry.builtin.Component)
+    function context:declareRefLazy(fn) local value = fn(); return {get = function() return value end} end
+    function context:onEvent(_, name) assert(name == "tf3SubsidyManagerOffersOpened") end
+    context.currentRecipeId = badgeId
+    registry.recipes[badgeId](context, {props = {{}}})
+    local badgeComponent = nodes[context.result[1]]
+    assert(badgeComponent.recipeId == registry.builtin.Component)
+    local layout = nodes[badgeComponent.props.props[1].layout]
+    assert(layout.recipeId == registry.builtin.FloatingLayout)
+    local children = layout.props.props[1].children
+    assert(#children == 2)
+    for _, child in ipairs(children) do assert(nodes[child].recipeId == registry.builtin.FloatingLayoutChild) end
+    assert(nodes[nodes[children[1]].props.props[1].item].recipeId == registry.builtin.ImageView)
+    assert(nodes[nodes[children[2]].props.props[1].item].recipeId == registry.builtin.Component)
     -- Table cells are ordinary recipes, unlike GameBar/Window delegation.
     -- Execute each through shipped Lua registration and opaque node construction.
     for _, key in ipairs({"type", "resource", "destination", "requirement", "progress", "result", "reward", "time", "status"}) do

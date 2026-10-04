@@ -10,6 +10,7 @@ assert(#result.syntax_errors == 0, "Teal syntax errors")
 assert(generated)
 
 local source = "::/game_mechanics/subventions/subventions.gs"
+local workerSubsidyId = "::/game_mechanics/subventions/deliver_workers/deliver_workers.res"
 local warnings, states = {}, {}
 local stateIndex, reads = 0, 0
 local component, entity, exists, readFailure = nil, 123, true, false
@@ -33,8 +34,13 @@ function react.RegisterRecipe(_, fn)
     end
 end
 function react.CallOriginalRecipe(fn, params) return fn(params) end
+function react.onMount(_) end -- Mount acknowledgement is exercised by offer_badge_test.lua.
 function react.fireEvent(_, name, params) events[#events + 1] = {name = name, params = params} end
 function react.RegisterWrapperRecipe(name, wrapped, fn)
+    if name == "TF3SubsidyManagerOfferBadgeIcon" then
+        assert(wrapped ~= nil)
+        return function(params) return {kind = "OfferBadgeIcon", params = params} end
+    end
     if name == "TF3SubsidyManagerWindow" then windowRecipe = fn end
     if name == "TF3SubsidyManagerGameBar" then
         assert(wrapped == gameBar.GameBar, "GameBar wrapper must preserve the native recipe metadata")
@@ -127,7 +133,7 @@ end, useFn = function(path)
     end
 end}
 api.res = {cargoTypeRep = {find = function(key) return key == "FISH" and 1 or -1 end,
-    get = function(id) assert(id == 1); return {name = "Fish", icon = "fish.tga"} end}, genericRep = {find = function(id) return id == "real-subsidy" and 1 or -1 end,
+    get = function(id) assert(id == 1); return {name = "Fish", icon = "fish.tga"} end}, genericRep = {find = function(id) return (id == "real-subsidy" or id == workerSubsidyId) and 1 or -1 end,
     get = function() return {data = {scriptFile = "subsidy.script"}} end}}
 local env = setmetatable({api = api, _ = translate,
     log = {warning = function(message) warnings[#warnings + 1] = message end},
@@ -317,7 +323,7 @@ assert(pair.children[1] == industry, "native industry button replaced")
 local button = pair.children[2]
 assert(button.meta.tooltip == "tf3_subsidy_manager_button_tooltip")
 assert(button.toolStack == industry.toolStack and button.toolDefinition == managerTool)
-assert(button.content.path:find("contract_26.tga", 1, true))
+assert(button.content.kind == "OfferBadgeIcon")
 assert(added == 0, "window created persistently before user opens it")
 button.showFn(); assert(visible and added == 1)
 assert(tree.tool == managerTool.name)
@@ -397,6 +403,33 @@ assert(content(tree).children[3].children[1].children[1].meta.enabled == false)
 native.data.nativeProgress.value = math.huge
 refresh(tree); tree = render()
 assert(texts(content(tree).children[1].children[4]) == "5 / 10")
+-- Only Transport Workers gets numeric native boost progress, without invented counts.
+reset(validState())
+local workers = record("Transport Workers", nil, nil)
+workers.id, workers.uid = workerSubsidyId, 74
+component.state.activeSubventions = {workers}
+tree = render()
+for _, case in ipairs({{0, "0% Workers"}, {0.125, "12.5% Workers"}, {0.6, "60% Workers"}, {1, "100% Workers"}}) do
+    workers.data.nativeProgress = {value = case[1], text = "Workers"}
+    refresh(tree); tree = render()
+    local cell = content(tree).children[1].children[4].children[1]
+    local bar = cell.content.layout.children[1]
+    assert(bar.kind == "ProgressBar" and bar.value == case[1] and bar.label == case[2])
+    assert(cell.meta.tooltip == case[2])
+    assert(workers.data.delivered == nil and workers.data.toDeliver == nil and workers.data.migrated == nil)
+end
+for _, invalidProgress in ipairs({{}, {value = 0.6}, {value = "0.6", text = "Workers"},
+    {value = -0.1, text = "Workers"}, {value = 1.1, text = "Workers"},
+    {value = math.huge, text = "Workers"}, {value = -math.huge, text = "Workers"}, {value = 0/0, text = "Workers"}}) do
+    workers.data.nativeProgress = invalidProgress
+    refresh(tree); tree = render()
+    local cell = content(tree).children[1].children[4]
+    assert(cell.children[1].content.layout.children[1].kind == "TextView")
+    assert(texts(cell) == "tf3_subsidy_manager_unknown_progress")
+end
+workers.data.nativeProgress = nil
+refresh(tree); tree = render()
+assert(texts(content(tree).children[1].children[4]) == "tf3_subsidy_manager_unknown_progress")
 -- Unavailable state must not imply known zero counts; corrupt UIDs never dispatch.
 reset(nil); tree = render()
 assert(tree.content.children[1].children[1].buttons[1].content.text == "tf3_subsidy_manager_active")
