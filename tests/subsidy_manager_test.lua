@@ -52,8 +52,14 @@ function react.useStateLazy(fn)
 end
 function react.useState(value) return react.useStateLazy(function() return value end) end
 local builtin = {type = {Orientation = {Vertical = 1, Horizontal = 2}, ImageViewScaling = {AutoFit = 1}, ScrollBarPolicy = {AlwaysOff = 1, AsNeededButAlwaysReserveSpace = 2}}}
-for _, name in ipairs({"TextView", "BoxLayout", "Button", "ImageView", "Window", "ProgressBar", "ToolButton", "ScrollArea"}) do
-    builtin[name] = function(...) local args = {...}; local params = args[#args]; params.kind = name; return params end
+for _, name in ipairs({"TextView", "BoxLayout", "Button", "ImageView", "Window", "ProgressBar", "ToolButton", "ScrollArea", "Component"}) do
+    builtin[name] = function(...) local args = {...}; local params = args[#args]; params.kind = name
+        if name == "ScrollArea" then
+            assert(params.content and params.content.kind ~= "BoxLayout" and params.content.kind ~= "FloatingLayout",
+                "DeferredCellTree child must not be a Layout")
+        end
+        return params
+    end
 end
 local api = {
     type = {ComponentType = {GAME_SCRIPT = 1, GAME_TIME = 2, GAME_SPEED = 3}},
@@ -133,7 +139,7 @@ local function texts(node)
     visit(node)
     return table.concat(result, "\n")
 end
-local function content(tree) return tree.content.children[2].content end
+local function content(tree) return tree.content.children[2].content.layout.children[1] end
 local function clickTab(tree, index) tree.content.children[1].children[index].onClick() end
 local function refresh(tree) tree.content.children[1].children[4].onClick() end
 local function record(name, delivered, required)
@@ -145,6 +151,10 @@ local function validState()
         completedSubventions = {record("complete", 10, 10)},
         failedSubventions = {record("failed", 2, 10)}}}
 end
+
+-- Mutation-style boundary check: the reported direct-layout content is rejected.
+local accepted, scrollError = pcall(builtin.ScrollArea, {content = builtin.BoxLayout {children = {}}})
+assert(not accepted and tostring(scrollError):find("DeferredCellTree child must not be a Layout", 1, true))
 
 reset(validState())
 local tree = render()
@@ -196,6 +206,14 @@ assert(#content(tree).children == 10)
 assert(texts(content(tree).children[5]) == "decimal\n1.5 / 3 transported  |  50%")
 assert(texts(content(tree).children[9]):find("unknown_progress", 1, true))
 assert(texts(content(tree).children[10]):find("0%%"))
+
+-- All tabs must provide component content, including empty Offered and empty History.
+reset({state = {proposedSubventions = {}, activeSubventions = {}}})
+tree = render()
+for index = 1, 3 do
+    clickTab(tree, index)
+    assert(render().content.children[2].content.kind == "Component")
+end
 
 -- Native card dispatch preserves complex effects and isolates legacy helper writes.
 reset(validState())

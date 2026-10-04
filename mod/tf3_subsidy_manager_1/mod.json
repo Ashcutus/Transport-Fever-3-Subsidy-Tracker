@@ -1,6 +1,6 @@
 {
     "modId": "tf3_subsidy_manager",
-    "revision": 6,
+    "revision": 7,
     "severityAdd": "None",
     "severityRemove": "None",
     "cosmetic": true,

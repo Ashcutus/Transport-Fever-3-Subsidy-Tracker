@@ -26,6 +26,14 @@ These findings come from the installed TF3 resources and real game logs inspecte
 - `CallOriginalRecipe` is explicitly unsupported for builtins in shipped `react.lua`. Do not use it as a way to intercept native Button/ToolButton/BoxLayout recipes.
 - Recipe calls can carry refs and styles before their parameters. Forward every argument unchanged when wrapping a module function; preserve original native refs. Do not simplify forwarding to only one or two arguments.
 
+### ScrollArea Content Contract — Confirmed Tab Regression
+
+- Revision 6 starts with the corrected GameBar wrapper but opening Offered/History in the reported save repeatedly fails with **DeferredCellTree child must not be a Layout**, at `BuiltinScrollArea.cpp:106`. The same shared scrolling body also applies to populated In Progress.
+- `builtin.ScrollArea.content` must resolve to a component/widget, not a direct `BoxLayout` or `FloatingLayout`. The base type only says `TreeNodeId`, so upstream Teal does not catch this constraint. Inspect shipped usage: `gui/main/main_mod_button_area.tl` uses `content = builtin.Component { layout = builtin.BoxLayout { ... } }`.
+- Always put the manager's selected-tab content inside a `builtin.Component` with its own BoxLayout. This covers populated lists, empty lists, History (which is a layout even when empty), unavailable state, and read errors uniformly. Do not remove scrolling or special-case only the Offered tab.
+- Different native controls have different content contracts: Window uses a layout, while ScrollArea requires a component. Do not apply this rule indiscriminately to every `content` field.
+- The regression mock now rejects direct layout content for ScrollArea and checks empty/populated tab rendering. Preserve that boundary check; ordinary Teal syntax and generic node mocks missed this runtime error. The C++ renderer remains untested by the harness, so a fresh real-game tab check is still required.
+
 ### Toolbar and Input
 
 - `gui/game_bar/game_bar.tl` builds the right-hand statistics tray in `GameBarMenuRight`. Industry Statistics is `menu.industry-statistics.button`, with `IA_SELECT_STATISTICS_INDUSTRIES` (F8 in the inspected key definitions). It uses native `builtin.ToolButton` and the game's tool stack.
