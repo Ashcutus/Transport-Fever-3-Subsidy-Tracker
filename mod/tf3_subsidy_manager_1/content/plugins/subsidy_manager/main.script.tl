@@ -175,19 +175,24 @@ local SubsidyManagerHost = react.RegisterPluginRecipe(entryPoint.ModEntryPointEx
 end)
 
 local SubsidyManagerButton = react.RegisterPluginRecipe(modArea.MainModButtonAreaExtension, "CopilotSubsidyManagerButton", function() : TreeNodeId
-	return builtin.Button {
-		meta = {
-			id = "copilot-subsidy-manager.button",
-			tooltip = _("copilot_subsidy_manager_button_tooltip"),
+	return builtin.BoxLayout {
+		orientation = builtin.type.Orientation.Horizontal,
+		children = {
+			builtin.Button {
+				meta = {
+					id = "copilot-subsidy-manager.button",
+					tooltip = _("copilot_subsidy_manager_button_tooltip"),
+				},
+				content = builtin.ImageView {
+					path = "::/gui/context_helper/icons/menu_subsidies@2x.tga",
+					scaling = builtin.type.ImageViewScaling.AutoFit,
+				},
+				onClick = function()
+					local visible = api.gui.byId.isVisible(WINDOW_ID)
+					api.gui.byId.setVisible(WINDOW_ID, not visible)
+				end,
+			},
 		},
-		content = builtin.ImageView {
-			path = "::/gui/context_helper/icons/menu_subsidies@2x.tga",
-			scaling = builtin.type.ImageViewScaling.AutoFit,
-		},
-		onClick = function()
-			local visible = api.gui.byId.isVisible(WINDOW_ID)
-			api.gui.byId.setVisible(WINDOW_ID, not visible)
-		end,
 	}
 end)
 
