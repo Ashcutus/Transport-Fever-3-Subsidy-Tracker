@@ -14,11 +14,11 @@ Keep offered, active and historical subsidies in one place. Compare the availabl
 
 ## Screenshots
 
-Screenshots are coming before publication. Contributors can use the prepared [capture notes and image locations](docs/screenshots/README.md).
+Repository screenshots are not included yet. Contributors can use the [capture notes and image locations](docs/screenshots/README.md).
 
 ## Installation
 
-**Mod Hub:** Once published, find **Subsidy Manager** in TF3's Mod Hub, subscribe, then enable it for your save. A listing link will be added here after publication.
+**Mod Hub:** Find **Subsidy Manager** in TF3's Mod Hub, subscribe, then enable it for your save.
 
 **Manual installation:** Download the release ZIP and extract its `tf3_subsidy_manager_1` folder into your TF3 user-data `mods` directory. Enable **Subsidy Manager** for your save. Use your own TF3 user-data folder, rather than the game installation directory. Developers can instead copy `mod/tf3_subsidy_manager_1` from this repository.
 
@@ -33,9 +33,9 @@ Use **Refresh** after subsidies change. The game handles acceptance and decline 
 
 ## Compatibility
 
-The revision 9 baseline has been tested in a real TF3 save on Linux. Windows, macOS, Xbox and PlayStation testing has not been performed. The new compact-empty window preset still requires visual testing.
+Subsidy Manager has been tested in a real TF3 save on Linux. Windows, macOS, Xbox and PlayStation runtime testing has not been performed.
 
-TF3's Mod Hub/mod.io supports distribution across desktop and console platforms; availability of this mod depends on its processing and approval. Console compatibility has not been verified. [Urban Games' mod distribution overview](https://www.transportfever3.com/news/dev-blog-episode-5-highlights/) explains the pipeline.
+The published v1.0.0 package has completed PC/console package validation. Package validation does not establish runtime testing on those platforms. [Urban Games' mod distribution overview](https://www.transportfever3.com/news/dev-blog-episode-5-highlights/) explains the pipeline.
 
 Mods that replace the same toolbar or subsidy UI may conflict. Future TF3 updates may require compatibility updates.
 
@@ -48,7 +48,7 @@ Mods that replace the same toolbar or subsidy UI may conflict. Future TF3 update
 
 ## Version
 
-**v1.0.0 — Initial Release**, prepared for publication. See [release notes](CHANGELOG.md). TF3's internal manifest revision is a separate update counter.
+**v1.0.1 — Metadata Update** updates the Mod Hub description and summary only. v1.0.0 is already published. See [release notes](RELEASE_NOTES.md). TF3's internal manifest revision is a separate update counter.
 
 ## Feedback / Issues
 
