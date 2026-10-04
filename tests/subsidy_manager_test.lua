@@ -25,10 +25,22 @@ local windowRecipe, managerTool
 local events, replacements = {}, {}
 local gameBar = { GameBar = function(params) return {kind = "GameBar", params = params} end }
 local react = {}
-function react.RegisterRecipe(_, fn) return fn end
+function react.RegisterRecipe(_, fn)
+    return function(...)
+        local node = fn(...)
+        assert(node.kind == "BoxLayout" or node.kind == "FloatingLayout", "Recipe child must be a layout")
+        return node
+    end
+end
 function react.CallOriginalRecipe(fn, params) return fn(params) end
 function react.fireEvent(_, name, params) events[#events + 1] = {name = name, params = params} end
-function react.RegisterWrapperRecipe(_, _, fn) windowRecipe = fn; return fn end
+function react.RegisterWrapperRecipe(name, wrapped, fn)
+    if name == "CopilotSubsidyManagerWindow" then windowRecipe = fn end
+    if name == "CopilotSubsidyManagerGameBar" then
+        assert(wrapped == gameBar.GameBar, "GameBar wrapper must preserve the native recipe metadata")
+    end
+    return fn
+end
 local function state(value)
     return {value = value, old = function(self) return self.value end,
         set = function(self, nextValue) self.value = nextValue end}

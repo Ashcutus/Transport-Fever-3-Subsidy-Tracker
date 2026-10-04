@@ -313,7 +313,9 @@ local function installToolbar(_replacementApi : ReactReplacementApi)
 	local originalToolButton = builtin.ToolButton
 	local currentGameCtx : GameContext = nil
 	local originalGameBar = gameBar.GameBar
-	local WithContext = react.RegisterRecipe("CopilotSubsidyManagerGameBar", function(params : GameBar.GameBarParam) : TreeNodeId
+	-- CallOriginalRecipe creates a GameBar recipe node, not its layout.
+	-- Register the delegation as a wrapper so the native transform can unwrap it.
+	local WithContext = react.RegisterWrapperRecipe("CopilotSubsidyManagerGameBar", originalGameBar, function(params : GameBar.GameBarParam) : TreeNodeId
 		currentGameCtx = params.gameCtx
 		return react.CallOriginalRecipe(originalGameBar, params)
 	end)
