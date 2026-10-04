@@ -99,4 +99,21 @@ local missingPadding = {}; for _, rule in ipairs(list) do
     if rule.levels[#rule.levels].element ~= "Window::Content" then missingPadding[#missingPadding + 1] = rule end
 end
 assert(not pcall(validatePadding, missingPadding))
+-- Fixed native presets preserve the populated baseline and shrink empty bodies only.
+local baseWindow, emptyWindow, emptyRegion
+for _, rule in ipairs(list) do
+    local levels = rule.levels
+    if levelMatches(levels[1], nil, nil, "tf3-subsidy-manager.window") then
+        if #levels == 1 and #levels[1].classList == 0 then baseWindow = rule.styleSheet end
+        if #levels == 1 and levels[1].classList[1] == "tf3-subsidy-empty" then emptyWindow = rule.styleSheet end
+        if #levels == 2 and levels[1].classList[1] == "tf3-subsidy-empty" and levels[2].classList[1] == "tf3-subsidy-data-region" then emptyRegion = rule.styleSheet end
+    end
+end
+assert(baseWindow and emptyWindow and emptyRegion)
+assert(emptyWindow.size[1] < baseWindow.size[1] and emptyWindow.size[2] < baseWindow.size[2])
+assert(baseWindow.size[1] == 1180 and baseWindow.size[2] == 640, "Retain UAT-confirmed populated dimensions")
+for _, preset in ipairs({baseWindow, emptyWindow}) do
+    for axis = 1, 2 do assert(preset.minSize[axis] == preset.size[axis] and preset.maxSize[axis] == preset.size[axis]) end
+end
+assert(emptyRegion.size[2] > 0 and emptyRegion.size[2] < emptyWindow.size[2])
 print("PASS: shipped stylesheet selector parser, table stretch hierarchy, shared widget inset, scoped equal tray sizing and mutation checks")

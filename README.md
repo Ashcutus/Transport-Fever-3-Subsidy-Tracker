@@ -1,120 +1,65 @@
-# TF3 Subsidy Manager — v0.1 Native UI
+# Subsidy Manager for Transport Fever 3
 
-This repository contains a small, read-only Transport Fever 3 mod proof of concept. It adds a small Subsidy Manager button beside Industry Statistics in the bottom-right toolbar, opens a movable game window, and consolidates the subsidy lists already attached to a game-script component. It does not accept, decline, edit, or otherwise change subsidies.
+Keep offered, active and historical subsidies in one place. Compare the available opportunities, track progress, and click a subsidy to open Transport Fever 3's own detail window.
 
-## Phase 1: Investigation
+## Features
 
-### Confirmed API
+- Native toolbar button beside Industry Statistics.
+- **Offered**, **In Progress** and **History** views with subsidy counts.
+- Readable tables showing available type, resource, destination, requirement or progress, rewards and remaining time. Click column headers to sort.
+- Native subsidy details, map highlighting and the game's Accept/Decline controls.
+- A separate **Refresh** button to update the overview whenever you need it.
+- Native styling, a movable window and a compact preset when the whole snapshot is empty.
+- No changes to subsidy rules or simulation state.
 
-- TF3 mods are directories with a `mod.json` manifest and resource files. The installed game includes Teal definitions and shipped mods; the official manual's [introduction](https://wiki.transportfever3.com/doku.php?id=modding:introduction) says mods are directory-based and warns against editing installation files.
-- The official [scripting reference](https://wiki.transportfever3.com/script-doc/) documents `api.engine` as read-only access to the engine state from both GUI and engine script states. It exposes `forEachEntityWithComponent`, `getComponent`, `ComponentType.GAME_SCRIPT`, and `Engine.Component.GameScript<T>.state`.
-- TF3's public engine API exposes `api.engine.system.gameScriptSystem.getEntityForGameScript(name)`. The POC uses that accessor with `::/game_mechanics/subventions/subventions.gs`, the same resource name used by the installed base-game subsidy UI. `GAME_SCRIPT` can be read by entity, but TF3 rejects enumeration of that component type.
-- The installed base type file `base/tealdef/game_mechanics/subventions/subvention.d.tl` defines `SubventionState` with `proposedSubventions`, `activeSubventions`, `completedSubventions`, and `failedSubventions`. A subsidy record includes status and timestamps; its data includes name, expiry durations, required quantity, delivered quantity, and upfront/completion/failure effects. Effects can be Money, Reputation, or TownExperience.
-- The built-in UI types also define card data for description, deadline, progress, locations, cargo icons, and effects. A current community mod, [TF3 Minimap](https://github.com/schbrongx/tf3mod-minimap), demonstrates a bottom mod-button-area plugin, `builtin.Window`, a `ModEntryPointExtension`, and the current React GUI resource layout.
-- `api.gui.game.getGuiSaveData(modId)` and `setGuiSaveData(modId, data)` are documented. They are suitable for mod-owned GUI preferences persisted with a save. The game's own script state is also part of save state.
-- `api.gui.camera.focusEntity` and `focusPosition` are documented, so camera focus is possible when a relevant entity or position is available.
+## Screenshots
 
-### Not Exposed or Uncertain
-
-- The subsidy records and their lifecycle implementation are in `base/tealdef`, not in the public `api/tealdef` package. The engine accessor is officially read-only, but subsidy field names are base-game contracts and could change between game updates. The mod therefore guards for missing state and performs no writes.
-- The base subsidy type declares lifecycle callbacks (`onAccept`, `onUpdate`, `onComplete`, `onFailure`), but there is no documented external-mod subscription hook for those callbacks. This POC uses an explicit Refresh control rather than adding a polling loop.
-- The state shape has completed and failed collections, but the shipped type declarations alone do not establish how long those collections are retained. The POC displays records still present in those lists; long-term history retention needs in-game verification across completion, failure, save/reload, and multiple versions.
-- The manager does not infer missing rewards, locations, or failure reasons. It dispatches each real record through its shipped `getCardData` helper; failures are logged per record and preserve the other rows.
-- No supported direct-acceptance API was found. There is no acceptance action in this POC; use the game's normal subsidy interface.
-- The shipped statistics tray has no dedicated mod extension point. The integration below depends on undocumented shipped GUI modules and must be rechecked after game updates.
-
-## Using the Manager
-
-Click **Subsidy Manager** beside **Industry Statistics** to open or close the native, movable window. Choose **In Progress**, **Offered**, or **History**, and use **Refresh** to reread the save. History distinguishes **Successful** and **Failed**. The selected tab and its snapshot count appear in a native segmented control; Refresh is a separate action. A fixed-size window contains a native statistics table with its own vertical scrolling and header. No persistent launcher occupies the viewport.
-
-The compact overview uses six columns per section:
-
-| Section | Columns |
-| --- | --- |
-| Offered | Type, Resource, Destination, Requirement, Reward, Time Remaining |
-| In Progress | Type, Resource, Destination, Progress, Reward, Deadline |
-| History | Status, Type, Resource, Destination, Result, Reward / Consequence |
-
-Cargo names/icons and available locations come from real records and native helpers. Active progress uses TF3's progress label and value when available, with a defensive transported/required fallback. Successful history shows completion effects; failed history shows native failure consequences and a distinct status icon. Long cell text exposes its full value through a tooltip. Missing fields show a dash or unavailable progress; tasks that provide neither cargo fields nor cargo icons cannot supply a resource summary. Native details remain the complete presentation.
-
-Click any cell in a formatted row to open TF3's existing subsidy detail window. The game supplies the description, task, locations, money, income multipliers, durations, and other supported effects. Offered records expose the game's normal Accept/Decline controls there; the mod implements neither action. Native details may take over the active tool, just as when selected from vanilla subsidy notifications.
-
-There is **no default shortcut** and no custom keyboard listener. F9 remains TF3's Screenshot action (`IA_GAME_SCREENSHOT`), confirmed in the installed user key definitions. Esc and other vanilla shortcuts use TF3's normal input routing.
-
-The initial read runs once per manager window instance; switching tabs does not reread engine state. Refresh copies records and card data into a detached snapshot. Reopening the manager creates a fresh snapshot. No subsidy polling or persistent history database is added. Empty and unavailable states are explicit; a failed state read logs its cause and leaves Refresh available to retry.
-
-## Native Integration Evidence
-
-Implementation was checked against the installed TF3 resources, extracted to temporary files for inspection. No installation files were modified.
-
-- `gui/game_bar/game_bar.tl`: `GameBarMenuRight` builds Industry Statistics (`menu.industry-statistics.button`, `IA_SELECT_STATISTICS_INDUSTRIES`) in its horizontal statistics group using `builtin.ToolButton`. `MainModButtonAreaExtension` belongs to a separate mod area, so its old launcher resources were removed.
-- `gui/main/bootstrap_game.tl`: loads `react-replacement-config` resources before React initialization. The mod uses this mechanism and `RegisterWrapperRecipe` to wrap the exported `GameBar` recipe, preserving it with `react.CallOriginalRecipe` and retaining its game context. Wrapper registration supplies the native `innerRecipeId` metadata required when returning another recipe node. Revision 5 used ordinary recipe registration here and failed UI startup with **Recipe child must be a layout**; revision 6 corrects that registration.
-- **Undocumented integration:** during that bootstrap callback, the mod wraps the shared `builtin.ToolButton` module function and adds a sibling only when the metadata ID is Industry Statistics. All original arguments, refs, and native button properties pass through. This avoids copying the vanilla toolbar implementation, but can conflict with mods replacing the same module/recipe. There is no public statistics-tray plugin API in this build.
-- `gui/game_bar/game_bar.css.lua`: native ToolButton selectors supply the circular surface, hover/pressed/checked behavior and icon sizing. A mod-owned white contract/reward icon has the same 52×52 `@2x` asset size as the native 26-unit statistics icons. The stylesheet keeps the native 508-unit tray and 10-unit gaps, with all statistics/notification/menu tray ToolButtons and icons consistently sized to 21 logical units (42 pixels in @2x assets); layout and stylesheet units follow UI scaling, with no screen-positioned launcher.
-- `gui/statistics/statistic_industries.tl` and `scripts/builtin.d.tl`: the overview reuses `DataTable`, weighted `ColumnDesc` headers and ordinary layout-returning cell recipes. Native table scrolling keeps its header inside the table. Manager-scoped stretch rules cover its internal `Table` and `Table::Layout`, following native statistics, as well as the surrounding content hierarchy. Because `userParam` reaches only newly created cells, the table identity changes on tab selection or manual Refresh. No cell polling is added.
-- `gui/game_bar/game_bar_widgets.tl`: the manager reuses `ToggleButtonGroup` for selection styling and snapshot counts. Shared padding targets the native `Window::Content` widget, while the shared layout supplies vertical separation for populated, empty and unavailable states. Revision 9 removes the manager-only checked-mask override and inherits the native surface/colors/transforms/hover/pressed styling. Final selected appearance and toolbar fit need visual UAT.
-- `gui/main/tool_react_util.tl`: `registerToolWithWindow` owns creation, closing, shelving, and removal through the existing tool stack. Closing removes the manager instead of retaining the POC's hidden singleton. This addresses the potential input/focus interference from the old lifecycle without intercepting Esc or replacing the pause menu. The reported Esc failure had no accompanying Lua error in the inspected log; its resolution still requires an in-game input check.
-- `game_mechanics/subventions/subventions_gui.tl`: dispatches `SubventionDesc.scriptFile .. ".getCardData"` via `util.useFn`. The manager uses the same full-card dispatch, on detached records because legacy helpers can migrate fields. Shipped helpers format money, other effects, income multipliers and durations. Offered summaries use `spawnTime + expireDurationProposed` (the shipped `defaultTimeout` contract) with `util.formatDurationWithCurrentCalenderSpeed`; vanilla card deadlines describe the task duration instead.
-- `game_mechanics/notifications/types/subvention*.script.tl` and `gui/entity_window/make_non_entity_window.tl`: the manager fires the same `selectViewKey` event with `subsidy_<uid>` and the real detached record to open the vanilla detail. It does not copy the vanilla card or issue simulation commands.
-
-TF3 removes completed records when their bonus expires in the inspected lifecycle code. History only displays records still retained by the game. Actual retention through failure, bonus expiry, and save/reload needs gameplay verification.
+Screenshots are coming before publication. Contributors can use the prepared [capture notes and image locations](docs/screenshots/README.md).
 
 ## Installation
 
-This mod can be installed manually without changing any Transport Fever 3 game files. Copy the entire `mod/tf3_subsidy_manager_1` folder from this repository into the `mods` folder for your TF3 user data. For the Steam/Linux setup used during development, the destination is:
+**Mod Hub:** Once published, find **Subsidy Manager** in TF3's Mod Hub, subscribe, then enable it for your save. A listing link will be added here after publication.
 
-```text
-~/.local/share/Steam/userdata/7253637/3493540/local/mods/
-```
+**Manual installation:** Download the release ZIP and extract its `tf3_subsidy_manager_1` folder into your TF3 user-data `mods` directory. Enable **Subsidy Manager** for your save. Use your own TF3 user-data folder, rather than the game installation directory. Developers can instead copy `mod/tf3_subsidy_manager_1` from this repository.
 
-If the `mods` folder does not exist, create it. After copying, verify the manifest is at `.../local/mods/tf3_subsidy_manager_1/mod.json` (not in an extra nested `tf3_subsidy_manager_1` folder). Restart TF3, enable **Subsidy Manager (Proof of Concept)** in the mod list for a save, then load the save.
+## Usage
 
-For another Steam account or platform, use that account's TF3 user-data `mods` directory; the Steam account ID and Steam library location may differ. Do not copy the mod into the game installation directory. TF3's mod browser uses mod.io; this source directory can also be packaged and shared manually.
+1. Load a save with the mod enabled.
+2. Click **Subsidy Manager** in the bottom-right toolbar, beside Industry Statistics.
+3. Choose **Offered**, **In Progress** or **History**.
+4. Click a row to open the game's subsidy details.
 
-Revision 6 uses the mod ID `tf3_subsidy_manager` and matching resource namespace. This identity rename removes the former branding; it is separate from the revision bump. Existing saves that enabled the previous mod identity may need the renamed mod enabled again in their mod list. The folder remains `tf3_subsidy_manager_1`, and the mod stores no simulation state to migrate.
+Use **Refresh** after subsidies change. The game handles acceptance and decline in its native detail window. No keyboard shortcut is required.
 
-## Removal
+## Compatibility
 
-Disable the mod in the save's mod list, exit the game, and remove the `tf3_subsidy_manager_1` directory from the user-data `mods` directory. This POC stores no custom simulation or subsidy state, so removing it cannot remove or corrupt subsidy records.
+The revision 9 baseline has been tested in a real TF3 save on Linux. Windows, macOS, Xbox and PlayStation testing has not been performed. The new compact-empty window preset still requires visual testing.
 
-## Development Checks
+TF3's Mod Hub/mod.io supports distribution across desktop and console platforms; availability of this mod depends on its processing and approval. Console compatibility has not been verified. [Urban Games' mod distribution overview](https://www.transportfever3.com/news/dev-blog-episode-5-highlights/) explains the pipeline.
 
-The game compiles `.tl` scripts when loading mods. For editor-side type checking, run from `mod/tf3_subsidy_manager_1`, set `TF3_INSTALL_DIR` to the TF3 install directory, and use the included `tlconfig.lua` and `all_def.d.tl` with Teal (`tl`). TF3 extends the upstream Teal definitions (including React metadata), so upstream checking may report framework compatibility errors; the game remains the authoritative compiler. The `.res.lua` files can be checked with `luac -p`.
+Mods that replace the same toolbar or subsidy UI may conflict. Future TF3 updates may require compatibility updates.
 
-Run the mocked regression checks from the repository root with Lua 5.3+ and a Teal source checkout:
+## Known limitations
 
-```sh
-TEAL_DIR=/path/to/tl lua5.4 tests/subsidy_manager_test.lua
-```
+- Refresh is manual; the overview does not update continuously.
+- History shows only records still retained by TF3, not a permanent archive.
+- Missing native fields are left unavailable. The game's detail window remains the complete source of information.
+- English is the currently supplied language.
 
-The harness transpiles the actual mod script, rejects Teal syntax errors, and exercises the plugin recipes against mocked engine and React APIs. It covers named script lookup without enumeration, missing/invalid state, read failure and retry, snapshot isolation (including legacy helper writes), lazy initialization, all tabs, incomplete/nonfinite progress, complex native effect text, offer expiry, detail dispatch, 20-row fixtures for every section, all-cell selection, native progress, partial card data, tab counts, refresh cell recreation, toolbar argument forwarding, and tool close lifecycle. It does not replace the game's compiler or UI runtime.
+## Version
 
-The upstream Teal checker does not model TF3's injected React `meta` parameters. Diagnostics about `meta` on native Button/BoxLayout/ToolButton calls are framework metadata compatibility errors, also present in shipped UI code; they are separate from syntax or ordinary mod type failures. The game remains the authoritative compiler.
+**v1.0.0 — Initial Release**, prepared for publication. See [release notes](CHANGELOG.md). TF3's internal manifest revision is a separate update counter.
 
-For the GameBar startup regression, also run the contract check against the installed game's actual React module (requires `unzip`):
+## Feedback / Issues
 
-```sh
-unzip -p "$TF3_INSTALL_DIR/base/content/gui.zip" gui/main/react.lua > /tmp/tf3-react.lua
-TEAL_DIR=/path/to/tl TF3_REACT_LUA=/tmp/tf3-react.lua lua5.4 tests/tf3_react_contract_test.lua
-```
+Report problems or suggest improvements through [GitHub Issues](https://github.com/Ashcutus/Transport-Fever-3-Subsidy-Tracker/issues). Include the mod revision, TF3 version, platform and a screenshot or error log where useful.
 
-This check executes the shipped Lua recipe registration and node creation, verifies the wrapper's native metadata and original GameBar parameter forwarding, executes every new table cell recipe, and rejects revision 5's registration under a modeled native layout constraint. The C++ renderer is mocked; this is stronger than plain-function recipe mocks but does not establish a successful in-game load.
+## Credits
 
-Revision 7 wraps the scroll area's body in a native Component, following shipped TF3 usage. Revision 6 passed a list BoxLayout directly to ScrollArea and failed when viewing Offered/History with **DeferredCellTree child must not be a Layout**. The component wrapper applies to all tabs and fallback states; the regression harness now enforces this content constraint.
+Transport Fever 3 is developed by Urban Games. This is an independent community mod, with no affiliation or endorsement implied.
 
-The user's revision 7 UAT confirms real-save startup, toolbar placement/opening, real data in all three sections, native detail selection, correct native task/resource/location/effects/map highlighting, and native Accept/Decline controls. These are the regression baseline, not a new revision 8 game run.
+## License
 
-Revision 8 user UAT confirmed startup, toolbar opening, real counts, tab switching and native selected tabs/Refresh. It also exposed invisible populated tables (no headers/rows, only a sliver), missing body inset and a crowded toolbar. Revision 9 corrects omitted internal Table/Table::Layout stretch rules, moves padding from BoxLayout to the shared Window::Content widget, and fits eight equal buttons into the native tray. The source-level omissions are identified; the resulting rendering is still unverified in C++.
+Subsidy Manager is licensed under the [MIT License](LICENSE). You may use, modify, fork and redistribute it under the standard MIT terms.
 
-Run the stylesheet contract check with TF3's shipped selector parser:
-
-```sh
-unzip -p "$TF3_INSTALL_DIR/base/content/gui.zip" gui/main/stylesheetutil.lua > /tmp/tf3-stylesheetutil.lua
-TF3_STYLESHEETUTIL_LUA=/tmp/tf3-stylesheetutil.lua lua5.4 tests/tf3_stylesheet_contract_test.lua
-```
-
-It checks internal stretch rules, the shared content-widget inset, tray-only uniform sizing and fit arithmetic, including mutation checks for omitted rules. The state/20-record and shipped React suites remain required. No test here executes native C++ layout, clipping, stylesheet precedence or painting.
-
-Revision 9 increments the current main manifest from 8 to 9 with the same mod ID. All suites and syntax/resource/manifest checks pass; installed-definition checking reports only eight known injected `meta` diagnostics. No subsidy reads, snapshots, helpers or detail dispatch changed. No user-data installation or revision 9 game run was performed.
-
-Next UAT must confirm visible headers/rows in Offered/In Progress/History, many-record scrolling, Refresh then selection of the new snapshot, body inset including empty/error states, consistent toolbar size/fit and selected shape, and resolution/UI-scale behavior. Preserve the proven startup/tool/detail flow; recheck Esc/F9/F8 and history retention through save/reload/bonus expiry. These visual/runtime outcomes are not claimed fixed before real-game testing.
+For contributors and release maintainers: [development checks](docs/DEVELOPMENT.md) and [release preparation](docs/RELEASE.md).

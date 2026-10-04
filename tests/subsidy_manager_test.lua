@@ -422,4 +422,31 @@ content(tree).children[1].children[1].children[1].onClick()
 assert(events[#events].params.nonEntity == "subsidy_81")
 assert(events[#events].params.extraParam.data.delivered == 7)
 assert(button.meta.class == "tf3-subsidy-toolbar" and button.toolDefinition == managerTool)
+-- Size follows the whole detached snapshot, never the selected tab.
+reset({state = {activeSubventions = {}, proposedSubventions = {}, completedSubventions = {}, failedSubventions = {}}})
+tree = render()
+for section = 1, 3 do
+    clickTab(tree, section); tree = render()
+    assert(tree.meta.class == "tf3-subsidy-empty")
+end
+component.state.proposedSubventions[1] = record("offer", 0, 10)
+assert(render().meta.class == "tf3-subsidy-empty", "Engine changes must not resize without Refresh")
+refresh(tree); tree = render()
+for section = 1, 3 do
+    clickTab(tree, section); tree = render()
+    assert(tree.meta.class == "tf3-subsidy-populated", "An empty selected tab must retain the snapshot's table size")
+end
+component.state.proposedSubventions = {}
+refresh(tree); assert(render().meta.class == "tf3-subsidy-empty")
+for _, collection in ipairs({"activeSubventions", "proposedSubventions", "completedSubventions", "failedSubventions"}) do
+    local only = {state = {activeSubventions = {}, proposedSubventions = {}, completedSubventions = {}, failedSubventions = {}}}
+    only.state[collection][1] = record("only record", 0, 10)
+    reset(only); tree = render()
+    for section = 1, 3 do
+        clickTab(tree, section); assert(render().meta.class == "tf3-subsidy-populated")
+    end
+end
+reset(nil); assert(render().meta.class == "tf3-subsidy-empty")
+reset(validState()); readFailure = true
+assert(render().meta.class == "tf3-subsidy-empty")
 print("PASS: snapshots, partial/nonfinite data, native table cells/20-row fixtures, tabs/counts, refresh, detail selection, toolbar refs and lifecycle")
