@@ -144,7 +144,10 @@ local env = setmetatable({api = api, _ = translate,
 local exports = assert(load(generated, "subsidy-manager", "t", env))()
 local function render()
     stateIndex = 0
-    return windowRecipe({})
+    local tree = windowRecipe({})
+    assert(tree.content.kind == "BoxLayout" and tree.content.meta.class == "tf3-subsidy-content",
+        "Every section/fallback must retain the shared window content layout")
+    return tree
 end
 local function reset(nextComponent)
     component = nextComponent
