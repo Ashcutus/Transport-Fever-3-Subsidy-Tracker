@@ -52,11 +52,30 @@ function react.useStateLazy(fn)
 end
 function react.useState(value) return react.useStateLazy(function() return value end) end
 local builtin = {type = {Orientation = {Vertical = 1, Horizontal = 2}, ImageViewScaling = {AutoFit = 1}, ScrollBarPolicy = {AlwaysOff = 1, AsNeededButAlwaysReserveSpace = 2}}}
-for _, name in ipairs({"TextView", "BoxLayout", "Button", "ImageView", "Window", "ProgressBar", "ToolButton", "ScrollArea", "Component"}) do
+for _, name in ipairs({"TextView", "BoxLayout", "Button", "ImageView", "Window", "ProgressBar", "ToolButton", "ScrollArea", "Component", "ToggleButtonGroup", "ColumnDesc", "DataTable"}) do
     builtin[name] = function(...) local args = {...}; local params = args[#args]; params.kind = name
+        if name == "ProgressBar" then
+            assert(params.text == nil and type(params.label) == "string", "Native ProgressBar uses label, not text")
+            assert(params.value >= 0 and params.value <= 1)
+        end
         if name == "ScrollArea" then
             assert(params.content and params.content.kind ~= "BoxLayout" and params.content.kind ~= "FloatingLayout",
                 "DeferredCellTree child must not be a Layout")
+        end
+        if name == "DataTable" then
+            assert(params.disableSortKey and params.keyboardNavigation == false)
+            assert(params.scrollPolicyHorizontal == builtin.type.ScrollBarPolicy.AlwaysOff)
+            assert(params.scrollPolicyVertical == builtin.type.ScrollBarPolicy.AsNeededButAlwaysReserveSpace)
+            params.children = {}
+            for _, rowKey in ipairs(params.rowKeys) do
+                local cells = {}
+                for colKey, col in ipairs(params.columns) do
+                    assert(col.kind == "ColumnDesc" and col.weight > 0)
+                    cells[colKey] = col.recipe({rowKey = rowKey, colKey = colKey, userParam = params.userParam})
+                    assert(cells[colKey].kind == "BoxLayout", "Native cell recipes must return a layout")
+                end
+                params.children[#params.children + 1] = {children = cells}
+            end
         end
         return params
     end
@@ -96,15 +115,19 @@ end, useFn = function(path)
     return function(recordCopy, lightweight)
         assert(not lightweight, "complex effects require full card data")
         if recordCopy.data.name == "broken-card" then error("bad card") end
+        if recordCopy.data.name == "invalid-card" then return false end
+        if recordCopy.data.name == "partial-card" then return {} end
         recordCopy.data.migrated = true -- legacy helpers must only see detached data
-        return {title = {name = recordCopy.data.name}, cargoIcons = {"fish.tga"}, cargoToDeliver = 30,
+        return {title = {name = recordCopy.data.name}, cargoIcons = {"fish.tga"}, cargoToDeliver = recordCopy.data.toDeliver,
+            progress = recordCopy.data.nativeProgress,
             location = {to = {77, "Castle Cary"}},
             complete = {{text = "$9.90 M Payment"}, {text = "2x Income for 4 Years 6 Months 1 Day"}},
             failure = {{text = "Actual failure consequence"}},
             expireDuration = {value = 0.5, name = "9 Months"}}
     end
 end}
-api.res = {genericRep = {find = function(id) return id == "real-subsidy" and 1 or -1 end,
+api.res = {cargoTypeRep = {find = function(key) return key == "FISH" and 1 or -1 end,
+    get = function(id) assert(id == 1); return {name = "Fish", icon = "fish.tga"} end}, genericRep = {find = function(id) return id == "real-subsidy" and 1 or -1 end,
     get = function() return {data = {scriptFile = "subsidy.script"}} end}}
 local env = setmetatable({api = api, _ = translate,
     log = {warning = function(message) warnings[#warnings + 1] = message end},
@@ -134,14 +157,15 @@ local function texts(node)
         if child.text then result[#result + 1] = child.text end
         if child.label then result[#result + 1] = child.label end
         if child.content then visit(child.content) end
+        if child.layout then visit(child.layout) end
         for _, nextChild in ipairs(child.children or {}) do visit(nextChild) end
     end
     visit(node)
     return table.concat(result, "\n")
 end
 local function content(tree) return tree.content.children[2].content.layout.children[1] end
-local function clickTab(tree, index) tree.content.children[1].children[index].onClick() end
-local function refresh(tree) tree.content.children[1].children[4].onClick() end
+local function clickTab(tree, index) tree.content.children[1].children[1].onValueChange(index) end
+local function refresh(tree) tree.content.children[1].children[2].onClick() end
 local function record(name, delivered, required)
     return {data = {name = name, delivered = delivered, toDeliver = required}}
 end
@@ -158,7 +182,8 @@ assert(not accepted and tostring(scrollError):find("DeferredCellTree child must 
 
 reset(validState())
 local tree = render()
-assert(texts(content(tree).children[1]) == "active\n5 / 10 transported  |  50%")
+assert(texts(content(tree).children[1].children[1]) == "active")
+assert(texts(content(tree).children[1].children[4]) == "5 / 10")
 local before = reads
 render()
 assert(reads == before, "render reread engine state")
@@ -195,7 +220,7 @@ reset({state = {proposedSubventions = {}, activeSubventions = {}}})
 tree = render()
 assert(content(tree).text == "tf3_subsidy_manager_no_active")
 clickTab(tree, 3)
-assert(texts(content(render()).children[1]) == "tf3_subsidy_manager_no_history")
+assert(content(render()).text == "tf3_subsidy_manager_no_history")
 reset({state = {proposedSubventions = {}, activeSubventions = {
     false, {}, {data = false}, record("", nil, nil), record("decimal", 1.5, 3),
     record("negative", -1, 10), record("infinite", math.huge, 10), record("nan", 0/0, 10),
@@ -203,9 +228,9 @@ reset({state = {proposedSubventions = {}, activeSubventions = {
 }}})
 tree = render()
 assert(#content(tree).children == 10)
-assert(texts(content(tree).children[5]) == "decimal\n1.5 / 3 transported  |  50%")
+assert(texts(content(tree).children[5].children[4]) == "1.5 / 3")
 assert(texts(content(tree).children[9]):find("unknown_progress", 1, true))
-assert(texts(content(tree).children[10]):find("0%%"))
+assert(texts(content(tree).children[10].children[4]) == "0 / 0")
 
 -- All tabs must provide component content, including empty Offered and empty History.
 reset({state = {proposedSubventions = {}, activeSubventions = {}}})
@@ -230,8 +255,8 @@ assert(texts(row):find("Castle Cary", 1, true))
 assert(texts(row):find("2x Income for 4 Years 6 Months 1 Day", 1, true))
 assert(texts(row):find("9 Months", 1, true))
 assert(not subsidy.data.migrated, "card helper mutated engine record")
-assert(content(tree).children[2].meta.enabled == false)
-row.onClick()
+assert(content(tree).children[2].children[1].children[1].meta.enabled == false)
+row.children[1].children[1].onClick()
 local event = events[#events]
 assert(event.name == "selectViewKey" and event.params.nonEntity == "subsidy_42")
 assert(event.params.extraParam ~= subsidy and event.params.extraParam.uid == 42)
@@ -295,4 +320,103 @@ button.showFn(); assert(visible and added == 1)
 assert(tree.tool == managerTool.name)
 button.hideFn(); assert(not visible and not mounted)
 button.showFn(); tree.onClose(); assert(not visible and not mounted)
-print("PASS: state reads, malformed data, snapshots, native effects/detail dispatch, toolbar hook, and tool close lifecycle")
+-- Native segmented control state/counts and separate manual Refresh.
+reset(validState())
+tree = render()
+local controls = tree.content.children[1]
+local tabs = controls.children[1]
+assert(tabs.kind == "ToggleButtonGroup" and tabs.selected == 1 and not tabs.deselectAllowed)
+assert(tabs.buttons[1].content.text == "tf3_subsidy_manager_active (1)")
+assert(tabs.buttons[2].content.text == "tf3_subsidy_manager_offered (1)")
+assert(tabs.buttons[3].content.text == "tf3_subsidy_manager_history (2)")
+assert(controls.children[2].kind == "Button" and controls.children[2].meta.class == "secondary")
+clickTab(tree, 2); tree = render()
+assert(tree.content.children[1].children[1].selected == 2)
+assert(content(tree).columns[4].name == "tf3_subsidy_manager_column_requirement")
+local oldKey = content(tree).meta.localKey
+refresh(tree); tree = render()
+assert(content(tree).meta.localKey ~= oldKey, "Refresh must recreate native cells: userParam is only applied to new cells")
+
+-- Fixtures only: 20 active/offered/history rows, native formatting, missing fields.
+local large = {state = {activeSubventions = {}, proposedSubventions = {}, completedSubventions = {}, failedSubventions = {}}}
+for index = 1, 20 do
+    local item = record("Supply Town " .. index, 21, 35)
+    item.id, item.uid, item.spawnTime = "real-subsidy", index, 200
+    item.data.cargoType, item.data.expireDurationProposed = "FISH", 1000
+    large.state.activeSubventions[index] = item
+    large.state.proposedSubventions[index] = item
+    if index <= 10 then large.state.completedSubventions[index] = item
+    else large.state.failedSubventions[index - 10] = item end
+end
+reset(large); tree = render()
+for section = 1, 3 do
+    clickTab(tree, section); tree = render()
+    local tableView = content(tree)
+    assert(#tableView.rowKeys == 20 and #tableView.children == 20 and #tableView.columns == 6)
+    assert(tableView.columns[1].name == (section == 3 and "tf3_subsidy_manager_column_status" or "tf3_subsidy_manager_column_type"))
+    local first = tableView.children[1]
+    local resourceColumn = section == 3 and 3 or 2
+    assert(texts(first.children[resourceColumn]) == "Fish")
+    assert(texts(first):find("Castle Cary", 1, true))
+    assert(texts(first):find("$9.90 M Payment + 2x Income for 4 Years 6 Months 1 Day", 1, true))
+    for _, row in ipairs(tableView.children) do
+        for _, cell in ipairs(row.children) do
+            cell.children[1].onClick()
+            assert(events[#events].name == "selectViewKey")
+        end
+    end
+    if section == 1 then assert(texts(first.children[4]) == "21 / 35") end
+    if section == 2 then
+        assert(texts(first.children[4]) == "35")
+        assert(texts(first.children[6]) == "Native duration: 700")
+    end
+    if section == 3 then
+        assert(texts(tableView.children[11].children[1]) == "tf3_subsidy_manager_failed")
+        assert(texts(tableView.children[11].children[6]) == "Actual failure consequence")
+        assert(not texts(tableView.children[11]):find("$9.90", 1, true))
+    end
+end
+-- Native non-count progress, partial helper data and invalid helper output.
+reset(validState())
+local native = component.state.activeSubventions[1]
+native.id, native.uid, native.data.nativeProgress = "real-subsidy", 71, {value = 0.6, text = "Workers"}
+local partial = record("partial-card", nil, nil)
+partial.id, partial.uid = "real-subsidy", 72
+local invalid = record("invalid-card", 2, 5)
+invalid.id, invalid.uid = "real-subsidy", 73
+component.state.activeSubventions[2], component.state.activeSubventions[3] = partial, invalid
+tree = render()
+local progress = content(tree).children[1].children[4].children[1].content.layout.children[1]
+assert(progress.kind == "ProgressBar" and progress.value == 0.6 and progress.label == "Workers")
+assert(texts(content(tree).children[2].children[2]) == "—")
+assert(texts(content(tree).children[2].children[5]) == "—")
+assert(content(tree).children[3].children[1].children[1].meta.enabled == false)
+native.data.nativeProgress.value = math.huge
+refresh(tree); tree = render()
+assert(texts(content(tree).children[1].children[4]) == "5 / 10")
+-- Unavailable state must not imply known zero counts; corrupt UIDs never dispatch.
+reset(nil); tree = render()
+assert(tree.content.children[1].children[1].buttons[1].content.text == "tf3_subsidy_manager_active")
+for _, uid in ipairs({math.huge, 0/0, -1, 1.5}) do
+    reset(validState())
+    local item = component.state.activeSubventions[1]
+    item.id, item.uid = "real-subsidy", uid
+    tree = render()
+    local cell = content(tree).children[1].children[1].children[1]
+    assert(cell.meta.enabled == false)
+    local eventCount = #events
+    cell.onClick()
+    assert(#events == eventCount, "Invalid subsidy UID dispatched native detail")
+end
+-- Refresh then select must use the new detached record.
+reset(validState())
+local item = component.state.activeSubventions[1]
+item.id, item.uid = "real-subsidy", 80
+tree = render()
+item.uid, item.data.delivered = 81, 7
+refresh(tree); tree = render()
+content(tree).children[1].children[1].children[1].onClick()
+assert(events[#events].params.nonEntity == "subsidy_81")
+assert(events[#events].params.extraParam.data.delivered == 7)
+assert(button.meta.class == "tf3-subsidy-toolbar" and button.toolDefinition == managerTool)
+print("PASS: snapshots, partial/nonfinite data, native table cells/20-row fixtures, tabs/counts, refresh, detail selection, toolbar refs and lifecycle")
