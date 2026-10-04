@@ -289,7 +289,13 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 			children = { controls, builtin.ScrollArea {
 				horizontalPolicy = builtin.type.ScrollBarPolicy.AlwaysOff,
 				verticalPolicy = builtin.type.ScrollBarPolicy.AsNeededButAlwaysReserveSpace,
-				content = content,
+				-- ScrollArea requires a component, even when the selected tab is a layout.
+				content = builtin.Component {
+					layout = builtin.BoxLayout {
+						orientation = builtin.type.Orientation.Vertical,
+						children = { content },
+					},
+				},
 			} },
 		},
 	}
