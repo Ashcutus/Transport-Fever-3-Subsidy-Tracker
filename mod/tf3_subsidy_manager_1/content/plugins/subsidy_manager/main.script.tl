@@ -320,12 +320,15 @@ local function columnText(item : Entry, key : string) : string
 		return type(required) == "number" and required >= 0 and required < math.huge and tostring(required) or "—"
 	end
 	if key == "progress" or key == "result" then
-		if key == "progress" and card and card.progress and type(card.progress.value) == "number" and card.progress.value >= 0 and card.progress.value < math.huge and type(card.progress.text) == "string" then
-			if isTransportWorkers(item) then
-				-- Native value is normalized workforce progress toward the industry boost, not a worker count.
-				if card.progress.value > 1 then return countText(item) end
-				return string.format("%g%% %s", card.progress.value * 100, card.progress.text)
+		if key == "progress" and isTransportWorkers(item) and card and card.progress and type(card.progress.text) == "string" then
+			-- Zero is valid native workforce progress; missing/invalid ratios retain the native label.
+			local value = card.progress.value
+			if type(value) == "number" and value >= 0 and value <= 1 then
+				return string.format("%g%% %s", value * 100, card.progress.text)
 			end
+			return card.progress.text
+		end
+		if key == "progress" and card and card.progress and type(card.progress.value) == "number" and card.progress.value >= 0 and card.progress.value < math.huge and type(card.progress.text) == "string" then
 			return card.progress.text
 		end
 		return countText(item)
