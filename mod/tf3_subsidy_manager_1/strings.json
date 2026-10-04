@@ -1,0 +1,19 @@
+{
+    "en": {
+        "copilot_subsidy_manager_title": "Subsidy Manager",
+        "copilot_subsidy_manager_button": "Subsidies",
+        "copilot_subsidy_manager_button_tooltip": "Open Subsidy Manager",
+        "copilot_subsidy_manager_active": "In Progress",
+        "copilot_subsidy_manager_offered": "Offered",
+        "copilot_subsidy_manager_history": "History",
+        "copilot_subsidy_manager_refresh": "Refresh",
+        "copilot_subsidy_manager_refresh_tooltip": "Refresh subsidy state",
+        "copilot_subsidy_manager_unavailable": "No readable subsidy state was found in this save.",
+        "copilot_subsidy_manager_no_active": "No active subsidies.",
+        "copilot_subsidy_manager_no_offers": "No offered subsidies.",
+        "copilot_subsidy_manager_no_history": "No completed or failed subsidies.",
+        "copilot_subsidy_manager_completed": "Completed",
+        "copilot_subsidy_manager_failed": "Failed",
+        "copilot_subsidy_manager_debug_source": "Subsidy state source: %s"
+    }
+}

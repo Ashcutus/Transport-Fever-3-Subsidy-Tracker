@@ -1,0 +1,16 @@
+{
+    "authors": [
+        {
+            "name": "Subsidy Manager contributors",
+            "role": "CREATOR"
+        }
+    ],
+    "description": "Read-only proof of concept for reviewing TF3 subsidy state.",
+    "name": "Subsidy Manager (Proof of Concept)",
+    "summary": "Displays proposed, active, completed, and failed subsidies exposed by the current save.",
+    "tags": [
+        "Misc",
+        "Script Mod"
+    ],
+    "url": ""
+}
