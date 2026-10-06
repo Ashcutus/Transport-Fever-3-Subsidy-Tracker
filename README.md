@@ -26,7 +26,7 @@ The mod keeps the game's subsidy rules and rewards as they are. You decide which
 Once your save is loaded:
 
 1. Click the **contract icon** in the bottom-right toolbar, beside Industry Statistics.
-2. Choose **Offered**, **In Progress** or **History**.
+2. Choose **Offered** for new contracts, **In Progress** for accepted tasks, or **History** for past outcomes.
 3. Click a subsidy to open its details. The game's usual controls handle acceptance and decline.
 4. Press **Refresh** whenever you want to bring the overview up to date.
 
@@ -61,9 +61,9 @@ Each section has its own guidance, with a compact window when the entire overvie
 
 </details>
 
-## What's new in v1.1.0
+## What's new in v1.1.1
 
-Clearer reward text, better column spacing, wrapping deadlines, illustrated empty views, friendlier store information, and a new cover and screenshot gallery. See the [changelog](CHANGELOG.md) for the full update.
+Clearer instructions for choosing a section and refreshing the overview, alongside the v1.1.0 improvements: readable rewards and deadlines, better table spacing, illustrated empty views, and a new cover and screenshot gallery. See the [changelog](CHANGELOG.md) for the full update.
 
 ## A few things to know
 

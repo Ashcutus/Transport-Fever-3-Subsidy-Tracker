@@ -1,5 +1,11 @@
 # Release Notes
 
+## v1.1.1 — Clearer guidance
+
+- Clearer Mod Hub instructions explain where to find offers, follow accepted tasks and review past outcomes.
+- Clarified that Refresh updates the overview while the manager is open.
+- Includes all v1.1.0 table, empty-view and gallery improvements below.
+
 ## v1.1.0 — A clearer overview, with a fresh look
 
 - Easier-to-read rewards: payments, income bonuses and other effects now appear on separate lines. Long values and bonus durations wrap instead of being cut off.
