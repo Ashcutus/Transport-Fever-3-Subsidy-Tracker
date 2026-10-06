@@ -227,9 +227,9 @@ readFailure = false; refresh(tree)
 assert(texts(content(render()).children[1]):find("active", 1, true))
 reset({state = {proposedSubventions = {}, activeSubventions = {}}})
 tree = render()
-assert(content(tree).text == "tf3_subsidy_manager_no_active")
+assert(texts(content(tree)):find("tf3_subsidy_manager_no_active", 1, true))
 clickTab(tree, 3)
-assert(content(render()).text == "tf3_subsidy_manager_no_history")
+assert(texts(content(render())):find("tf3_subsidy_manager_no_history", 1, true))
 reset({state = {proposedSubventions = {}, activeSubventions = {
     false, {}, {data = false}, record("", nil, nil), record("decimal", 1.5, 3),
     record("negative", -1, 10), record("infinite", math.huge, 10), record("nan", 0/0, 10),
@@ -246,7 +246,13 @@ reset({state = {proposedSubventions = {}, activeSubventions = {}}})
 tree = render()
 for index = 1, 3 do
     clickTab(tree, index)
-    assert(render().content.children[2].content.kind == "Component")
+    local emptyTree = render()
+    assert(emptyTree.content.children[2].content.kind == "Component")
+    local panel = content(emptyTree)
+    assert(panel.kind == "Component" and panel.meta.class == "tf3-subsidy-empty-state")
+    assert(panel.layout.children[1].path == "tf3_subsidy_manager::/plugins/subsidy_manager/icons/empty_contract_64.tga")
+    local suffix = ({"active", "offers", "history"})[index]
+    assert(texts(panel):find("tf3_subsidy_manager_empty_" .. suffix .. "_hint", 1, true))
 end
 
 -- Native card dispatch preserves complex effects and isolates legacy helper writes.
@@ -367,7 +373,19 @@ for section = 1, 3 do
     local resourceColumn = section == 3 and 3 or 2
     assert(texts(first.children[resourceColumn]) == "Fish")
     assert(texts(first):find("Castle Cary", 1, true))
-    assert(texts(first):find("$9.90 M Payment + 2x Income for 4 Years 6 Months 1 Day", 1, true))
+    assert(texts(first):find("$9.90 M Payment\n2x Income for 4 Years 6 Months 1 Day", 1, true))
+    local rewardColumn = section == 3 and 6 or 5
+    assert(tableView.columns[rewardColumn].weight == 1.75)
+    if section ~= 3 then
+        assert(tableView.columns[6].weight == tableView.columns[rewardColumn].weight,
+            "Rewards must share the original combined width budget with deadlines/expiry")
+        assert(first.children[6].children[1].meta.class:find("tf3-subsidy-time-cell", 1, true))
+    end
+    local rewardCell = first.children[rewardColumn].children[1]
+    assert(rewardCell.meta.class:find("tf3-subsidy-reward-cell", 1, true))
+    assert(rewardCell.meta.tooltip == "$9.90 M Payment\n2x Income for 4 Years 6 Months 1 Day")
+    assert(texts(first.children[rewardColumn]) == rewardCell.meta.tooltip,
+        "Reward values and durations must remain complete, on separate lines")
     for _, row in ipairs(tableView.children) do
         for _, cell in ipairs(row.children) do
             cell.children[1].onClick()

@@ -1,3 +1,9 @@
 /dist/
 __pycache__/
 *.pyc
+
+# Local development, validation and gallery-production notes
+/docs/DEVELOPMENT.md
+/docs/RELEASE.md
+/docs/screenshots/README.md
+/docs/screenshots/drafts/

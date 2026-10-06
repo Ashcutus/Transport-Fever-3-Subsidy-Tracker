@@ -68,6 +68,31 @@ local function validatePadding(list)
 end
 local list = rules(source)
 validateTable(list); validatePadding(list)
+-- Wrapping is confined to rewards, with no fixed height that clips extra effects.
+local rewardStyle
+for _, rule in ipairs(list) do
+    local levels = rule.levels
+    if #levels == 3 and levelMatches(levels[1], nil, nil, "tf3-subsidy-manager.window") and
+        levelMatches(levels[2], nil, "tf3-subsidy-reward-cell") and levelMatches(levels[3], "TextView") then
+        rewardStyle = rule.styleSheet
+    end
+end
+assert(rewardStyle and rewardStyle.textAutoWrap == true)
+assert(rewardStyle.maxSize[1] == 240 and rewardStyle.maxSize[2] == -1,
+    "Native reward wrapping needs a bounded width and unconstrained height")
+assert(not rewardStyle.size and not rewardStyle.minSize)
+local timeStyle
+for _, rule in ipairs(list) do
+    local levels = rule.levels
+    if #levels == 3 and levelMatches(levels[1], nil, nil, "tf3-subsidy-manager.window") and
+        levelMatches(levels[2], nil, "tf3-subsidy-time-cell") and levelMatches(levels[3], "TextView") then
+        timeStyle = rule.styleSheet
+    end
+end
+assert(timeStyle and timeStyle.textAutoWrap == true)
+assert(timeStyle.maxSize[1] == 220 and timeStyle.maxSize[2] == -1)
+assert(not timeStyle.size and not timeStyle.minSize)
+
 local buttons, icons = {}, {}
 for _, rule in ipairs(list) do
     local levels, style = rule.levels, rule.styleSheet
@@ -133,3 +158,27 @@ for _, preset in ipairs({baseWindow, emptyWindow}) do
 end
 assert(emptyRegion.size[2] > 0 and emptyRegion.size[2] < emptyWindow.size[2])
 print("PASS: shipped stylesheet selector parser, table stretch hierarchy, shared widget inset, scoped equal tray sizing and mutation checks")
+
+-- Illustrated empty views fit the compact body without fixed text height.
+local emptyPanel, compactPanel, emptyIcon, emptyTitle, emptyHint
+for _, rule in ipairs(list) do
+    local levels, style = rule.levels, rule.styleSheet
+    if #levels >= 2 and levelMatches(levels[1], nil, nil, "tf3-subsidy-manager.window") then
+        if levelMatches(levels[2], nil, "tf3-subsidy-empty-state") then
+            if #levels == 2 then
+                if levelMatches(levels[1], nil, "tf3-subsidy-empty") then compactPanel = style
+                else emptyPanel = style end
+            end
+            if #levels == 3 and levels[3].element == "ImageView" then emptyIcon = style end
+        elseif levelMatches(levels[2], nil, "tf3-subsidy-empty-title") then emptyTitle = style
+        elseif levelMatches(levels[2], nil, "tf3-subsidy-empty-hint") then emptyHint = style end
+    end
+end
+assert(emptyPanel and emptyPanel.maxSize[1] <= 608 and emptyPanel.gravity[1] == 0.5)
+assert(emptyPanel.size[2] == 490 and compactPanel and compactPanel.size[2] == 110,
+    "Empty content must allocate the whole data-region height for vertical centring")
+assert(emptyIcon and emptyIcon.size[1] == 64 and emptyIcon.size[2] <= 110)
+assert(emptyTitle and emptyHint)
+for _, style in ipairs({emptyTitle, emptyHint}) do
+    assert(style.textAutoWrap and style.maxSize[2] == -1 and not style.size)
+end
