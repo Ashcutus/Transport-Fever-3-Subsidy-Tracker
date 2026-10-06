@@ -1,65 +1,85 @@
 # Subsidy Manager for Transport Fever 3
 
-Keep offered, active and historical subsidies in one place. Compare the available opportunities, track progress, and click a subsidy to open Transport Fever 3's own detail window.
+![Subsidy Manager — Your next opportunity, in view](docs/screenshots/hero.png)
 
-## Features
+A useful subsidy offer can be easy to lose in a busy game. Subsidy Manager keeps your opportunities together, so you can spend less time searching through notifications and more time planning your next route.
 
-- Native toolbar button beside Industry Statistics.
-- **Offered**, **In Progress** and **History** views with subsidy counts.
-- Readable tables showing available type, resource, destination, requirement or progress, rewards and remaining time. Click column headers to sort.
-- Native subsidy details, map highlighting and the game's Accept/Decline controls.
-- A separate **Refresh** button to update the overview whenever you need it.
-- Native styling, a movable window and a compact preset when the whole snapshot is empty.
-- No changes to subsidy rules or simulation state.
+Compare offers, follow the tasks you've accepted, and see how your subsidies turned out—all from one window beside Industry Statistics.
 
-## Screenshots
+## What it helps you do
 
-Repository screenshots are not included yet. Contributors can use the [capture notes and image locations](docs/screenshots/README.md).
+- **Find your next opportunity.** Check the destination, requirements, rewards and remaining time before committing to an offer.
+- **Keep your plans on track.** See progress and deadlines for the subsidies you're working on.
+- **Read the whole reward.** Payments and bonuses sit on separate lines, with room for longer values and durations.
+- **Go straight to the details.** Click a row to open the game's familiar subsidy window, highlight its locations, and accept or decline an offer where available.
+- **Review your results.** History brings together successful and failed subsidies while the game retains them.
+- **Know when something new arrives.** A small dot on the toolbar icon marks new offers since you last opened the manager.
 
-## Installation
+The mod keeps the game's subsidy rules and rewards as they are. You decide which opportunities suit your network.
 
-**Mod Hub:** Find **Subsidy Manager** in TF3's Mod Hub, subscribe, then enable it for your save.
+## Getting started
 
-**Manual installation:** Download the release ZIP and extract its `tf3_subsidy_manager_1` folder into your TF3 user-data `mods` directory. Enable **Subsidy Manager** for your save. Use your own TF3 user-data folder, rather than the game installation directory. Developers can instead copy `mod/tf3_subsidy_manager_1` from this repository.
+**From Mod Hub:** Find **Subsidy Manager**, subscribe, and enable it for your save.
 
-## Usage
+**From a release ZIP:** Extract the `tf3_subsidy_manager_1` folder into the `mods` directory in your TF3 user-data folder, then enable it for your save.
 
-1. Load a save with the mod enabled.
-2. Click **Subsidy Manager** in the bottom-right toolbar, beside Industry Statistics.
-3. Choose **Offered**, **In Progress** or **History**.
-4. Click a row to open the game's subsidy details.
+Once your save is loaded:
 
-Use **Refresh** after subsidies change. The game handles acceptance and decline in its native detail window. No keyboard shortcut is required.
+1. Click the **contract icon** in the bottom-right toolbar, beside Industry Statistics.
+2. Choose **Offered**, **In Progress** or **History**.
+3. Click a subsidy to open its details. The game's usual controls handle acceptance and decline.
+4. Press **Refresh** whenever you want to bring the overview up to date.
 
-## Compatibility
+You can move and pin the window. When there are no subsidies in any section, it uses a compact layout with a friendly hint. There is no default keyboard shortcut.
 
-Subsidy Manager has been tested in a real TF3 save on Linux. Windows, macOS, Xbox and PlayStation runtime testing has not been performed.
+## Screenshot gallery
 
-The published v1.0.0 package has completed PC/console package validation. Package validation does not establish runtime testing on those platforms. [Urban Games' mod distribution overview](https://www.transportfever3.com/news/dev-blog-episode-5-highlights/) explains the pipeline.
+The gallery below uses real game captures. The cover above is promotional artwork.
 
-Mods that replace the same toolbar or subsidy UI may conflict. Future TF3 updates may require compatibility updates.
+### Your subsidies, one click away
 
-## Known limitations
+![The contract icon beside Industry Statistics opens Subsidy Manager](docs/screenshots/toolbar.png)
 
-- Refresh is manual; the overview does not update continuously.
-- History shows only records still retained by TF3, not a permanent archive.
-- Missing native fields are left unavailable. The game's detail window remains the complete source of information.
-- English is the currently supplied language.
+### Keep your next move in view
 
-## Version
+![In Progress shows real tasks, progress, multiline rewards and complete deadlines](docs/screenshots/active.png)
 
-**v1.0.1 — Metadata Update** updates the Mod Hub description and summary only. v1.0.0 is already published. See [release notes](RELEASE_NOTES.md). TF3's internal manifest revision is a separate update counter.
+### See what your network earned
 
-## Feedback / Issues
+![History shows successful subsidies with complete payment and income-bonus durations](docs/screenshots/history.png)
 
-Report problems or suggest improvements through [GitHub Issues](https://github.com/Ashcutus/Transport-Fever-3-Subsidy-Tracker/issues). Include the mod revision, TF3 version, platform and a screenshot or error log where useful.
+<details>
+<summary><strong>A clear view, even when a section is empty</strong></summary>
 
-## Credits
+Each section has its own guidance, with a compact window when the entire overview is empty.
 
-Transport Fever 3 is developed by Urban Games. This is an independent community mod, with no affiliation or endorsement implied.
+![Empty In Progress view with guidance to look for an offer](docs/screenshots/empty-active.png)
 
-## License
+![Empty Offered view with guidance to check again using Refresh](docs/screenshots/empty-offered.png)
 
-Subsidy Manager is licensed under the [MIT License](LICENSE). You may use, modify, fork and redistribute it under the standard MIT terms.
+![Empty History view explaining where retained outcomes appear](docs/screenshots/empty-history.png)
 
-For contributors and release maintainers: [development checks](docs/DEVELOPMENT.md) and [release preparation](docs/RELEASE.md).
+</details>
+
+## What's new in v1.1.0
+
+Clearer reward text, better column spacing, wrapping deadlines, illustrated empty views, friendlier store information, and a new cover and screenshot gallery. See the [changelog](CHANGELOG.md) for the full update.
+
+## A few things to know
+
+- **Refresh is manual.** The toolbar dot checks for new offers; it doesn't refresh the table for you.
+- **History is kept by the game.** Older entries can disappear when TF3 removes them.
+- **Some fields may be unavailable.** Open the game's detail window for the full task information.
+- **English is currently the supplied language.**
+
+The mod has been tested in real saves on Linux, including the updated In Progress and History tables and all three compact empty views. Gameplay testing on Windows, macOS, Xbox and PlayStation has not been performed. Mods that change the same toolbar or subsidy interface may conflict.
+
+## Feedback
+
+Found a problem or have an idea? [Open a GitHub issue](https://github.com/Ashcutus/Transport-Fever-3-Subsidy-Tracker/issues). Tell us your mod version, TF3 version and platform, and include a screenshot or error log if it helps explain what happened.
+
+## Credits and licence
+
+Created by **Ashcutus**. Transport Fever 3 is developed by Urban Games; Subsidy Manager is an independent community mod.
+
+Licensed under the [MIT License](LICENSE). You may use, modify and redistribute it under the standard MIT terms.

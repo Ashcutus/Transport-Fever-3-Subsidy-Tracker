@@ -5,9 +5,9 @@
             "role": "CREATOR"
         }
     ],
-    "description": "Never lose track of a subsidy again.\n\nSubsidy Manager brings your offered, active and completed subsidies together in one native-style overview.\n\nSee what subsidies are available, track progress, rewards and deadlines, and review previous outcomes without hunting through notifications.\n\nOpen Subsidy Manager from the bottom-right toolbar beside Industry Statistics. Choose In Progress, Offered or History, then click a subsidy to open the game's native details and Accept/Decline controls where available.\n\nUse Refresh at any time to update the overview.\n\nSubsidy Manager works with the game's existing subsidy system and does not alter subsidy rules or game balance.",
+    "description": "A useful subsidy offer can be easy to lose in a busy game. Subsidy Manager keeps your opportunities together, so you can spend less time searching through notifications and more time planning your next route.\n\nCompare your offers\nSee what needs delivering, where it needs to go, what you can earn and how long you have left. Payments and bonuses appear on separate lines, making rewards easier to read.\n\nKeep track of your plans\nSwitch to In Progress to check your current tasks, progress and deadlines. History lets you review successful and failed subsidies while the game retains them.\n\nOne click to the details\nClick any row to open the game's subsidy details, highlight the relevant locations and accept or decline an offer using the usual controls.\n\nEasy to find, easy to use\nLook for the contract icon beside Industry Statistics in the bottom-right toolbar. Choose Offered, In Progress or History, and press Refresh whenever you want an up-to-date view. A small dot on the icon lets you know new offers have arrived since you last opened the manager.\n\nYour game, your decisions\nSubsidy Manager keeps the game's subsidy rules and rewards as they are. It simply helps you see your options more clearly.",
     "name": "Subsidy Manager",
-    "summary": "View, track and manage offered, active and completed subsidies in one place.",
+    "summary": "Compare subsidy offers, follow your progress and find your next opportunity in one place.",
     "tags": [
         "Misc",
         "Script Mod"

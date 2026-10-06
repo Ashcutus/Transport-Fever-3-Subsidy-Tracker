@@ -344,7 +344,7 @@ local function columnText(item : Entry, key : string) : string
 		for _index, effect in ipairs(effects or {}) do
 			if type(effect.text) == "string" then texts[#texts + 1] = effect.text end
 		end
-		return #texts > 0 and table.concat(texts, " + ") or "—"
+		return #texts > 0 and table.concat(texts, "\n") or "—"
 	end
 	if key == "time" and card and card.expireDuration then return card.expireDuration.name or "—" end
 	return "—"
@@ -380,7 +380,7 @@ local function makeCell(key : string) : Recipe<Builtin.TableCellParam>
 		end
 		return builtin.BoxLayout {
 			children = { builtin.Button {
-				meta = { class = "tf3-subsidy-cell", tooltip = text, enabled = canOpenDetail(item) },
+				meta = { class = key == "reward" and "tf3-subsidy-cell, tf3-subsidy-reward-cell" or key == "time" and "tf3-subsidy-cell, tf3-subsidy-time-cell" or "tf3-subsidy-cell", tooltip = text, enabled = canOpenDetail(item) },
 				content = builtin.Component { layout = builtin.BoxLayout { orientation = builtin.type.Orientation.Horizontal, children = parts } },
 				onClick = function() if item then openDetail(item) end end,
 			} },
@@ -391,8 +391,30 @@ end
 local cellRecipes : {string : Recipe<Builtin.TableCellParam>} = {}
 for _index, key in ipairs({"type", "resource", "destination", "requirement", "progress", "result", "reward", "time", "status"}) do cellRecipes[key] = makeCell(key) end
 
-local function renderTable(items : {Entry}, section : integer, generation : integer, emptyText : string) : TreeNodeId
-	if #items == 0 then return builtin.TextView { text = emptyText } end
+local function renderEmpty(section : integer) : TreeNodeId
+	local title = section == 1 and _("tf3_subsidy_manager_no_active") or section == 2 and _("tf3_subsidy_manager_no_offers") or _("tf3_subsidy_manager_no_history")
+	local hint = section == 1 and _("tf3_subsidy_manager_empty_active_hint") or section == 2 and _("tf3_subsidy_manager_empty_offers_hint") or _("tf3_subsidy_manager_empty_history_hint")
+	return builtin.Component {
+		meta = { class = "tf3-subsidy-empty-state" },
+		mouseTransparent = true,
+		layout = builtin.BoxLayout {
+			orientation = builtin.type.Orientation.Horizontal,
+			children = {
+				builtin.ImageView { path = "tf3_subsidy_manager::/plugins/subsidy_manager/icons/empty_contract_64.tga", scaling = builtin.type.ImageViewScaling.AutoFit },
+				builtin.BoxLayout {
+					orientation = builtin.type.Orientation.Vertical,
+					children = {
+						builtin.TextView { meta = { class = "tf3-subsidy-empty-title" }, text = title },
+						builtin.TextView { meta = { class = "tf3-subsidy-empty-hint" }, text = hint },
+					},
+				},
+			},
+		},
+	}
+end
+
+local function renderTable(items : {Entry}, section : integer, generation : integer) : TreeNodeId
+	if #items == 0 then return renderEmpty(section) end
 	local keys = section == 3 and {"status", "type", "resource", "destination", "result", "reward"} or
 		{"type", "resource", "destination", section == 1 and "progress" or "requirement", "reward", "time"}
 	local columns : {TreeNodeId} = {}
@@ -401,7 +423,8 @@ local function renderTable(items : {Entry}, section : integer, generation : inte
 		columns[#columns + 1] = builtin.ColumnDesc {
 			name = _("tf3_subsidy_manager_column_" .. label),
 			recipe = cellRecipes[key],
-			weight = key == "reward" and 2.5 or key == "destination" and 1.5 or 1,
+			-- Split the old reward/time budget equally now that effects use multiple lines.
+			weight = (key == "reward" or key == "time") and 1.75 or key == "destination" and 1.5 or 1,
 			getCompareValue = function(rowKey : integer) : string return columnText(items[rowKey], key) end,
 		}
 	end
@@ -450,9 +473,9 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 	local content : TreeNodeId
 	if current.readError then content = builtin.TextView { text = _("tf3_subsidy_manager_read_error") }
 	elseif not current.stateFound then content = builtin.TextView { text = _("tf3_subsidy_manager_unavailable") }
-	elseif section == 1 then content = renderTable(current.active, section, generation:old(), _("tf3_subsidy_manager_no_active"))
-	elseif section == 2 then content = renderTable(current.offered, section, generation:old(), _("tf3_subsidy_manager_no_offers"))
-	else content = renderTable(history, section, generation:old(), _("tf3_subsidy_manager_no_history")) end
+	elseif section == 1 then content = renderTable(current.active, section, generation:old())
+	elseif section == 2 then content = renderTable(current.offered, section, generation:old())
+	else content = renderTable(history, section, generation:old()) end
 	local buttons : {Builtin.ToggleButtonGroupChildParam} = {}
 	local counts = {#current.active, #current.offered, #history}
 	for index, label in ipairs({"active", "offered", "history"}) do

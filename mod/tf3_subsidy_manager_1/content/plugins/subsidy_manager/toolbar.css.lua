@@ -41,5 +41,24 @@ function data()
     a("!tf3-subsidy-cell ImageView", { size = { 20, 20 } })
     a("!tf3-subsidy-cell TextView", { gravity = { -1, 0.5 } })
     a("!tf3-subsidy-cell ProgressBar", { minSize = { 90, 20 }, gravity = { -1, 0.5 } })
+    -- Separate native effects with line breaks; wrap long durations within the cell.
+    -- Shipped content_card.css.lua uses textAutoWrap with a bounded width.
+    -- Leave height unconstrained so the native table can allocate taller rows.
+    a("#tf3-subsidy-manager.window !tf3-subsidy-reward-cell TextView", {
+        textAutoWrap = true, maxSize = { 240, -1 }, gravity = { -1, 0.5 },
+    })
+    -- Native duration labels can include years, months and days; keep them complete.
+    a("#tf3-subsidy-manager.window !tf3-subsidy-time-cell TextView", {
+        textAutoWrap = true, maxSize = { 220, -1 }, gravity = { -1, 0.5 },
+    })
+    -- One compact illustrated panel also fits the all-empty 110-unit body.
+    a("#tf3-subsidy-manager.window !tf3-subsidy-empty-state", {
+        size = { -1, 490 }, gravity = { 0.5, 0.5 }, maxSize = { 560, -1 },
+    })
+    a("#tf3-subsidy-manager.window!tf3-subsidy-empty !tf3-subsidy-empty-state", { size = { -1, 110 } })
+    a("#tf3-subsidy-manager.window !tf3-subsidy-empty-state BoxLayout", { gravity = { -1, 0.5 }, innerSpacing = { 18, 6 } })
+    a("#tf3-subsidy-manager.window !tf3-subsidy-empty-state ImageView", { size = { 64, 64 }, gravity = { 0.5, 0.5 } })
+    a("#tf3-subsidy-manager.window !tf3-subsidy-empty-title", { fontSize = 18, color = { 0.93, 0.96, 0.98, 1 }, textAutoWrap = true, maxSize = { 440, -1 } })
+    a("#tf3-subsidy-manager.window !tf3-subsidy-empty-hint", { fontSize = 14, color = { 0.72, 0.80, 0.85, 1 }, textAutoWrap = true, maxSize = { 440, -1 } })
     return result
 end

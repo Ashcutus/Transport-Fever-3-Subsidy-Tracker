@@ -9,9 +9,9 @@
         "tf3_subsidy_manager_refresh": "Refresh",
         "tf3_subsidy_manager_refresh_tooltip": "Refresh subsidy state",
         "tf3_subsidy_manager_unavailable": "No readable subsidy state was found in this save.",
-        "tf3_subsidy_manager_no_active": "No active subsidies.",
-        "tf3_subsidy_manager_no_offers": "No offered subsidies.",
-        "tf3_subsidy_manager_no_history": "No completed or failed subsidies.",
+        "tf3_subsidy_manager_no_active": "Ready for your next contract?",
+        "tf3_subsidy_manager_no_offers": "More opportunities ahead",
+        "tf3_subsidy_manager_no_history": "Your subsidy story starts here",
         "tf3_subsidy_manager_completed": "Successful",
         "tf3_subsidy_manager_failed": "Failed",
         "tf3_subsidy_manager_debug_source": "Subsidy state source: %s",
@@ -29,6 +29,9 @@
         "tf3_subsidy_manager_column_deadline": "Deadline",
         "tf3_subsidy_manager_column_status": "Status",
         "tf3_subsidy_manager_column_result": "Result",
-        "tf3_subsidy_manager_column_reward_consequence": "Reward / Consequence"
+        "tf3_subsidy_manager_column_reward_consequence": "Reward / Consequence",
+        "tf3_subsidy_manager_empty_active_hint": "No tasks in progress. Look in Offered for your next opportunity.",
+        "tf3_subsidy_manager_empty_offers_hint": "No offers right now. Carry on with your routes and use Refresh to check again.",
+        "tf3_subsidy_manager_empty_history_hint": "No outcomes to show yet. Finished subsidies appear here while the game keeps them."
     }
 }
