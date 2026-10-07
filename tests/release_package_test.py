@@ -12,12 +12,12 @@ spec = importlib.util.spec_from_file_location("package_release", ROOT / "scripts
 builder = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(builder)
 version = (ROOT / "VERSION").read_text().strip()
-assert version == "1.1.1"
+assert version == "1.1.2"
 with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
     archive = builder.build(Path(first))
     again = builder.build(Path(second))
     assert archive.read_bytes() == again.read_bytes(), "Package builds must be reproducible"
-    assert archive.name == "subsidy-manager-v1.1.1.zip"
+    assert archive.name == "subsidy-manager-v1.1.2.zip"
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     assert archive.with_suffix(".zip.sha256").read_text().split()[0] == digest
     with zipfile.ZipFile(archive) as package:
@@ -29,7 +29,7 @@ with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as se
         assert not any(re.search(r"tests/|AGENTS|README|tlconfig|all_def|\.svg$|__pycache__|\.git", name) for name in names)
         manifest = json.loads(package.read(prefix + "mod.json"))
         assert manifest["modId"] == "tf3_subsidy_manager"
-        assert type(manifest["revision"]) is int and manifest["revision"] == 14, "v1.1.1 increments revision 13 once"
+        assert type(manifest["revision"]) is int and manifest["revision"] == 15, "v1.1.2 increments revision 14 once"
         assert manifest == json.loads((builder.MOD / "mod.json").read_text())
         assert "version" not in manifest and "platforms" not in manifest
         info = json.loads(package.read(prefix + "_metadata/modinfo.json"))
@@ -64,6 +64,11 @@ with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as se
                 assert not text.startswith("\ufeff")
                 assert not re.search(r"/home/|/tmp/|\b(?:copilot|codex|openai|gpt|proof of concept)\b", text, re.I), name
         expected = {prefix + path for path in builder.RUNTIME_FILES}
+        # Gallery must match the approved source captures, not only valid PNG headers.
+        gallery = ("hero", "toolbar", "active", "history", "empty-active", "empty-offered", "empty-history")
+        for index, source in enumerate(gallery):
+            preview = prefix + f"_metadata/{index}.png"
+            assert package.read(preview) == (ROOT / "docs/screenshots" / f"{source}.png").read_bytes(), f"Stale gallery: {preview}"
         assert set(names) >= expected
         assert all(name in expected or re.fullmatch(re.escape(prefix) + r"_metadata/\d+\.png", name) for name in names)
 print("PASS: runtime archive hygiene, public/internal version distinction, metadata, translations, MIT notice and reproducible ZIP/checksum")

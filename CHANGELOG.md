@@ -1,5 +1,11 @@
 # Release Notes
 
+## v1.1.2 — More resilient progress reads
+
+- If a full native subsidy card fails to load, retry the game’s lightweight card helper so available progress and rewards can still appear. This recovery also covers count-based tasks.
+- Worker progress keeps genuine native zero values as “0% Workers”; unreadable data remains explicitly unavailable.
+- Release checks now verify every packaged gallery image against its current approved source, preventing older previews from slipping into the ZIP.
+
 ## v1.1.1 — Clearer guidance
 
 - Clearer Mod Hub instructions explain where to find offers, follow accepted tasks and review past outcomes.

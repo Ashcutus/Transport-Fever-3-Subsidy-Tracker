@@ -119,7 +119,15 @@ local util = {formatDurationWithCurrentCalenderSpeed = function(duration, millis
 end, useFn = function(path)
     assert(path == "subsidy.script.getCardData")
     return function(recordCopy, lightweight)
-        assert(not lightweight, "complex effects require full card data")
+        if recordCopy.data.name == "paused-card" then
+            assert(recordCopy.data.migrated == nil, "failed full helper contaminated retry")
+            if not lightweight then
+                recordCopy.data.migrated = true
+                error("map overlay not initialized")
+            end
+        elseif recordCopy.data.name ~= "broken-card" then
+            assert(not lightweight, "complex effects require full card data")
+        end
         if recordCopy.data.name == "broken-card" then error("bad card") end
         if recordCopy.data.name == "invalid-card" then return false end
         if recordCopy.data.name == "partial-card" then return {} end
@@ -449,6 +457,28 @@ workers.data.nativeProgress = nil
 refresh(tree); tree = render()
 assert(texts(content(tree).children[1].children[4]) == "tf3_subsidy_manager_unknown_progress")
 -- Unavailable state must not imply known zero counts; corrupt UIDs never dispatch.
+-- Pre-tick full-card failure retains genuine native zero/nonzero progress.
+reset(validState())
+local paused = record("paused-card", nil, nil)
+paused.id, paused.uid, paused.acceptedTime = workerSubsidyId, 75, 0
+component.state.activeSubventions = {paused}
+for _, value in ipairs({0, 0.25}) do
+    paused.data.nativeProgress = {value = value, text = "Workers"}
+    tree = render()
+    refresh(tree); tree = render()
+    local cell = content(tree).children[1].children[4].children[1]
+    local bar = cell.content.layout.children[1]
+    assert(bar.kind == "ProgressBar" and bar.value == value)
+    assert(bar.label == string.format("%g%% Workers", value * 100))
+    assert(paused.data.migrated == nil and paused.acceptedTime == 0)
+end
+-- The same recovery covers count-based tasks; both failing paths stay unavailable.
+paused.id, paused.data.nativeProgress = "real-subsidy", {value = 0, text = "0 / 10"}
+refresh(tree); tree = render()
+assert(texts(content(tree).children[1].children[4]) == "0 / 10")
+paused.data.name = "broken-card"
+refresh(tree); tree = render()
+assert(texts(content(tree).children[1].children[4]) == "tf3_subsidy_manager_unknown_progress")
 reset(nil); tree = render()
 assert(tree.content.children[1].children[1].buttons[1].content.text == "tf3_subsidy_manager_active")
 for _, uid in ipairs({math.huge, 0/0, -1, 1.5}) do

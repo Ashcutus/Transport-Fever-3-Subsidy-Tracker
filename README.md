@@ -28,7 +28,7 @@ Once your save is loaded:
 1. Click the **contract icon** in the bottom-right toolbar, beside Industry Statistics.
 2. Choose **Offered** for new contracts, **In Progress** for accepted tasks, or **History** for past outcomes.
 3. Click a subsidy to open its details. The game's usual controls handle acceptance and decline.
-4. Press **Refresh** whenever you want to bring the overview up to date.
+4. Press **Refresh** whenever you want to bring the overview up to date, including after accepting a subsidy while paused.
 
 You can move and pin the window. When there are no subsidies in any section, it uses a compact layout with a friendly hint. There is no default keyboard shortcut.
 
@@ -61,14 +61,15 @@ Each section has its own guidance, with a compact window when the entire overvie
 
 </details>
 
-## What's new in v1.1.1
+## What's new in v1.1.2
 
-Clearer instructions for choosing a section and refreshing the overview, alongside the v1.1.0 improvements: readable rewards and deadlines, better table spacing, illustrated empty views, and a new cover and screenshot gallery. See the [changelog](CHANGELOG.md) for the full update.
+More resilient subsidy reads: when the game's full card helper fails, the manager retries its lightweight helper to retain available progress and rewards. The release ZIP includes the current cover and all six gallery images, checked against their approved sources. See the [changelog](CHANGELOG.md) for the full update.
 
 ## A few things to know
 
 - **Refresh is manual.** The toolbar dot checks for new offers; it doesn't refresh the table for you.
 - **History is kept by the game.** Older entries can disappear when TF3 removes them.
+- **Worker progress is a native workforce boost percentage.** Zero is shown as “0% Workers” when supplied by the game; it is not a cumulative passenger count.
 - **Some fields may be unavailable.** Open the game's detail window for the full task information.
 - **English is currently the supplied language.**
 

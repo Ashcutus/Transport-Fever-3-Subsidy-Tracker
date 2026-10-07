@@ -170,7 +170,14 @@ local function getCard(recordCopy : ISubvention, offered : boolean) : Subvention
 	if not desc or type(desc.scriptFile) ~= "string" then return nil end
 	local getCardData = util.useFn(desc.scriptFile .. ".getCardData") as function(ISubvention, boolean) : SubventionCardData
 	if not getCardData then return nil end
-	local formatted = getCardData(recordCopy, false)
+	-- Full cards also build map overlays, which can fail before simulation data
+	-- is ready. Retry the native overview path without inventing progress values.
+	-- Each attempt gets its own copy: legacy helpers can migrate before failing.
+	local ok, formatted = pcall(getCardData, copyTable(recordCopy) as ISubvention, false)
+	if not ok then
+		log.warning("[tf3_subsidy_manager] Full subsidy card unavailable; retrying native lightweight card: " .. tostring(formatted))
+		formatted = getCardData(copyTable(recordCopy) as ISubvention, true)
+	end
 	if type(formatted) ~= "table" then return nil end
 	local card = copyTable(formatted) as SubventionCardData
 	if offered and card then
