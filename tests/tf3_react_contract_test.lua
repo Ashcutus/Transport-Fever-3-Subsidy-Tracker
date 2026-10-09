@@ -117,7 +117,7 @@ local function check(code, expectWrapper)
     assert(nodes[nodes[children[2]].props.props[1].item].recipeId == registry.builtin.Component)
     -- Table cells are ordinary recipes, unlike GameBar/Window delegation.
     -- Execute each through shipped Lua registration and opaque node construction.
-    for _, key in ipairs({"type", "resource", "destination", "requirement", "progress", "result", "reward", "time", "status"}) do
+    for _, key in ipairs({"type", "resource", "destination", "requirement", "progress", "reward", "time", "status"}) do
         local id = assert(ids["TF3SubsidyManagerCell_" .. key])
         assert(registry.recipeMetas[id] == nil, "Table cells must use ordinary layout recipes")
         context.currentRecipeId = id

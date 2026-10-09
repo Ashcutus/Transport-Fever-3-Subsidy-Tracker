@@ -1,5 +1,11 @@
 # Release Notes
 
+## v1.1.2 — Cleaner overview messaging (revision 16)
+
+- History shows outcomes once in Status; removed the redundant Result column.
+- Missing overview values use a dash with an explanatory tooltip, including missing progress.
+- Read failures offer a clear Refresh action; empty History describes only records retained by the game.
+
 ## v1.1.2 — More resilient progress reads
 
 - If a full native subsidy card fails to load, retry the game’s lightweight card helper so available progress and rewards can still appear. This recovery also covers count-based tasks.

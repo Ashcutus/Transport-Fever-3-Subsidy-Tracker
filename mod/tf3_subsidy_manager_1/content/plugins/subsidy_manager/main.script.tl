@@ -310,7 +310,7 @@ local function countText(item : Entry) : string
 		local value = item.required > 0 and item.delivered / item.required or 0
 		if value < math.huge then return string.format("%g / %g", item.delivered, item.required) end
 	end
-	return _("tf3_subsidy_manager_unknown_progress")
+	return "—"
 end
 
 local function isTransportWorkers(item : Entry) : boolean
@@ -326,7 +326,7 @@ local function columnText(item : Entry, key : string) : string
 		local required = card and card.cargoToDeliver or item.required
 		return type(required) == "number" and required >= 0 and required < math.huge and tostring(required) or "—"
 	end
-	if key == "progress" or key == "result" then
+	if key == "progress" then
 		if key == "progress" and isTransportWorkers(item) and card and card.progress and type(card.progress.text) == "string" then
 			-- Zero is valid native workforce progress; missing/invalid ratios retain the native label.
 			local value = card.progress.value
@@ -343,13 +343,13 @@ local function columnText(item : Entry, key : string) : string
 	if key == "destination" and card and card.location then
 		local from = card.location.from and card.location.from[2] or ""
 		local to = card.location.to and card.location.to[2] or ""
-		return from ~= "" and to ~= "" and from .. " → " .. to or (to ~= "" and to or from)
+		return from ~= "" and to ~= "" and from .. " → " .. to or (to ~= "" and to or (from ~= "" and from or "—"))
 	end
 	if key == "reward" and card then
 		local texts : {string} = {}
 		local effects = item.outcome == "failed" and card.failure or card.complete
 		for _index, effect in ipairs(effects or {}) do
-			if type(effect.text) == "string" then texts[#texts + 1] = effect.text end
+			if type(effect.text) == "string" and effect.text ~= "" then texts[#texts + 1] = effect.text end
 		end
 		return #texts > 0 and table.concat(texts, "\n") or "—"
 	end
@@ -368,6 +368,7 @@ local function makeCell(key : string) : Recipe<Builtin.TableCellParam>
 		local rows = params.userParam as TableRows
 		local item = rows.entries[params.rowKey]
 		local text = item and columnText(item, key) or "—"
+		local tooltip = text == "—" and _("tf3_subsidy_manager_missing_value_tooltip") or text
 		local parts : {TreeNodeId} = {}
 		if item and key == "resource" and item.card then
 			for _index, path in ipairs(item.card.cargoIcons or {}) do
@@ -383,11 +384,11 @@ local function makeCell(key : string) : Recipe<Builtin.TableCellParam>
 			-- Some native tasks report a qualitative label (e.g. Workers), not counts.
 			parts[#parts + 1] = builtin.ProgressBar { value = math.min(1, item.card.progress.value), label = text }
 		else
-			parts[#parts + 1] = builtin.TextView { text = text, tooltipWhenClipped = text }
+			parts[#parts + 1] = builtin.TextView { text = text, tooltipWhenClipped = tooltip }
 		end
 		return builtin.BoxLayout {
 			children = { builtin.Button {
-				meta = { class = key == "reward" and "tf3-subsidy-cell, tf3-subsidy-reward-cell" or key == "time" and "tf3-subsidy-cell, tf3-subsidy-time-cell" or "tf3-subsidy-cell", tooltip = text, enabled = canOpenDetail(item) },
+				meta = { class = key == "reward" and "tf3-subsidy-cell, tf3-subsidy-reward-cell" or key == "time" and "tf3-subsidy-cell, tf3-subsidy-time-cell" or "tf3-subsidy-cell", tooltip = tooltip, enabled = canOpenDetail(item) },
 				content = builtin.Component { layout = builtin.BoxLayout { orientation = builtin.type.Orientation.Horizontal, children = parts } },
 				onClick = function() if item then openDetail(item) end end,
 			} },
@@ -396,7 +397,7 @@ local function makeCell(key : string) : Recipe<Builtin.TableCellParam>
 end
 
 local cellRecipes : {string : Recipe<Builtin.TableCellParam>} = {}
-for _index, key in ipairs({"type", "resource", "destination", "requirement", "progress", "result", "reward", "time", "status"}) do cellRecipes[key] = makeCell(key) end
+for _index, key in ipairs({"type", "resource", "destination", "requirement", "progress", "reward", "time", "status"}) do cellRecipes[key] = makeCell(key) end
 
 local function renderEmpty(section : integer) : TreeNodeId
 	local title = section == 1 and _("tf3_subsidy_manager_no_active") or section == 2 and _("tf3_subsidy_manager_no_offers") or _("tf3_subsidy_manager_no_history")
@@ -422,7 +423,7 @@ end
 
 local function renderTable(items : {Entry}, section : integer, generation : integer) : TreeNodeId
 	if #items == 0 then return renderEmpty(section) end
-	local keys = section == 3 and {"status", "type", "resource", "destination", "result", "reward"} or
+	local keys = section == 3 and {"status", "type", "resource", "destination", "reward"} or
 		{"type", "resource", "destination", section == 1 and "progress" or "requirement", "reward", "time"}
 	local columns : {TreeNodeId} = {}
 	for _index, key in ipairs(keys) do

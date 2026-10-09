@@ -29,7 +29,7 @@ with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as se
         assert not any(re.search(r"tests/|AGENTS|README|tlconfig|all_def|\.svg$|__pycache__|\.git", name) for name in names)
         manifest = json.loads(package.read(prefix + "mod.json"))
         assert manifest["modId"] == "tf3_subsidy_manager"
-        assert type(manifest["revision"]) is int and manifest["revision"] == 15, "v1.1.2 increments revision 14 once"
+        assert type(manifest["revision"]) is int and manifest["revision"] == 16, "UX update increments revision 15 once"
         assert manifest == json.loads((builder.MOD / "mod.json").read_text())
         assert "version" not in manifest and "platforms" not in manifest
         info = json.loads(package.read(prefix + "_metadata/modinfo.json"))
@@ -56,7 +56,7 @@ with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as se
             assert key in strings, key
         for suffix in ("active", "offered", "history"):
             assert "tf3_subsidy_manager_" + suffix in strings
-        for suffix in ("type", "resource", "destination", "requirement", "reward", "time", "progress", "deadline", "status", "result", "reward_consequence"):
+        for suffix in ("type", "resource", "destination", "requirement", "reward", "time", "progress", "deadline", "status", "reward_consequence"):
             assert "tf3_subsidy_manager_column_" + suffix in strings
         for name in names:
             if name.endswith((".json", ".lua", ".tl", ".txt")):

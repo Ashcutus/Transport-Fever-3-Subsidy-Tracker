@@ -246,7 +246,8 @@ reset({state = {proposedSubventions = {}, activeSubventions = {
 tree = render()
 assert(#content(tree).children == 10)
 assert(texts(content(tree).children[5].children[4]) == "1.5 / 3")
-assert(texts(content(tree).children[9]):find("unknown_progress", 1, true))
+assert(texts(content(tree).children[9].children[4]) == "—")
+assert(content(tree).children[9].children[4].children[1].meta.tooltip == "tf3_subsidy_manager_missing_value_tooltip")
 assert(texts(content(tree).children[10].children[4]) == "0 / 0")
 
 -- All tabs must provide component content, including empty Offered and empty History.
@@ -375,14 +376,19 @@ reset(large); tree = render()
 for section = 1, 3 do
     clickTab(tree, section); tree = render()
     local tableView = content(tree)
-    assert(#tableView.rowKeys == 20 and #tableView.children == 20 and #tableView.columns == 6)
+    assert(#tableView.rowKeys == 20 and #tableView.children == 20 and #tableView.columns == (section == 3 and 5 or 6))
     assert(tableView.columns[1].name == (section == 3 and "tf3_subsidy_manager_column_status" or "tf3_subsidy_manager_column_type"))
+    if section == 3 then
+        for _, column in ipairs(tableView.columns) do
+            assert(column.name ~= "tf3_subsidy_manager_column_result")
+        end
+    end
     local first = tableView.children[1]
     local resourceColumn = section == 3 and 3 or 2
     assert(texts(first.children[resourceColumn]) == "Fish")
     assert(texts(first):find("Castle Cary", 1, true))
     assert(texts(first):find("$9.90 M Payment\n2x Income for 4 Years 6 Months 1 Day", 1, true))
-    local rewardColumn = section == 3 and 6 or 5
+    local rewardColumn = 5
     assert(tableView.columns[rewardColumn].weight == 1.75)
     if section ~= 3 then
         assert(tableView.columns[6].weight == tableView.columns[rewardColumn].weight,
@@ -407,7 +413,7 @@ for section = 1, 3 do
     end
     if section == 3 then
         assert(texts(tableView.children[11].children[1]) == "tf3_subsidy_manager_failed")
-        assert(texts(tableView.children[11].children[6]) == "Actual failure consequence")
+        assert(texts(tableView.children[11].children[5]) == "Actual failure consequence")
         assert(not texts(tableView.children[11]):find("$9.90", 1, true))
     end
 end
@@ -451,11 +457,11 @@ for _, invalidProgress in ipairs({{}, {value = 0.6}, {text = "Workers"}, {value 
     refresh(tree); tree = render()
     local cell = content(tree).children[1].children[4]
     assert(cell.children[1].content.layout.children[1].kind == "TextView")
-    assert(texts(cell) == (invalidProgress.text or "tf3_subsidy_manager_unknown_progress"))
+    assert(texts(cell) == (invalidProgress.text or "—"))
 end
 workers.data.nativeProgress = nil
 refresh(tree); tree = render()
-assert(texts(content(tree).children[1].children[4]) == "tf3_subsidy_manager_unknown_progress")
+assert(texts(content(tree).children[1].children[4]) == "—")
 -- Unavailable state must not imply known zero counts; corrupt UIDs never dispatch.
 -- Pre-tick full-card failure retains genuine native zero/nonzero progress.
 reset(validState())
@@ -478,7 +484,7 @@ refresh(tree); tree = render()
 assert(texts(content(tree).children[1].children[4]) == "0 / 10")
 paused.data.name = "broken-card"
 refresh(tree); tree = render()
-assert(texts(content(tree).children[1].children[4]) == "tf3_subsidy_manager_unknown_progress")
+assert(texts(content(tree).children[1].children[4]) == "—")
 reset(nil); tree = render()
 assert(tree.content.children[1].children[1].buttons[1].content.text == "tf3_subsidy_manager_active")
 for _, uid in ipairs({math.huge, 0/0, -1, 1.5}) do
