@@ -5,6 +5,12 @@
 - Do not change the mod ID as part of routine version bumps.
 - The user explicitly requested a complete branding removal in PR #5. That PR separately renames the identity/resource namespace to `tf3_subsidy_manager`; keep resource references consistent and document that existing saves may need the renamed mod enabled again.
 
+## Release Description Updates
+
+- For every release, update the Mod Hub/App description in `mod/tf3_subsidy_manager_1/_metadata/modinfo.json` to reflect the changes being shipped. Keep it human friendly and explain what the changes help players do.
+- Maintain a visible “Changes” release history in that description, newest first, with a short heading and user-facing bullets for each release. Follow the maintainer’s preferred Auto Assign Terminals description style: concise overview, practical usage/settings guidance and readable lists. Omit internal revisions, tests, packaging and other non-user-facing changes from public changelog/release notes and the description. Keep validation evidence here instead. Describe optional features, defaults and meaningful limitations clearly; avoid unverified claims.
+- Keep the description, README, CHANGELOG.md and RELEASE_NOTES.md consistent. Preparing repository metadata does not publish it: follow the maintainer's authorization for staging and Mod Hub uploads.
+
 ## Pre-push and Staging Cleanup
 
 The maintainer requested these cleanup steps for every future release/update:
@@ -166,3 +172,22 @@ These findings come from the installed TF3 resources and real game logs inspecte
 - Gallery order: 0 promotional cover, 1 toolbar/icon, 2 populated In Progress, 3 populated History, 4 compact empty In Progress, 5 compact empty Offered, 6 compact empty History. The cover is promotional artwork, not gameplay evidence. Design drafts and production scripts stay local/ignored. The table gallery does not fabricate unavailable Offered records or native-detail captures.
 
 - The final seven-image gallery, including the new promotional hero, has been staged after a gallery backup with publication linkage preserved. The reproducible v1.1.0 ZIP contains 16 allowlisted files including all numbered previews and the empty-state runtime image. Source screenshots remain outside runtime resources. The changelog and release notes reflect the complete visual/copy update. No Mod Hub upload or public release/tag has been performed; the changes are being submitted through a review PR.
+
+### Optional Auto-decline — Revision 17
+
+- The maintainer authorizes an off-by-default “Auto-decline new offers” checkbox with an explanatory tooltip. It saves its preference and a separate versioned identity baseline in the existing mod GUI save namespace, preserving badge and unrelated data. Malformed settings default off; failed writes retry on valid timer ticks.
+- Use the existing five-second toolbar timer and identity-only proposed-offer lookup. Enabling/re-enabling establishes a fresh baseline, preserving current offers. An unavailable enable read defers the baseline until the next valid read. Only subsequent valid proposed identities dispatch the shipped native command: `api.cmd.sendCommand(api.cmd.makeScriptingSendEventCmd("", "Subvention", "onDecline", {uid = uid}))`. Never edit engine tables, intercept simulation scripts or touch active/history tasks.
+- Track dispatch identities independently of badge acknowledgement so opening the manager cannot suppress a future decline. Successful dispatch is recorded to avoid repeated commands while simulation delivery is pending; synchronous command errors retry on a later valid tick. Real-game asynchronous command delivery remains unverified. The manager's overview still refreshes manually.
+- Revision 17 increments 16 once; the maintainer assigned this staged update public version 1.2.0. The Mod Hub description includes the option and notable recent changelog improvements. Existing gallery captures predate the checkbox; do not claim they show the updated controls.
+- State/20-record, native-timer badge/auto-decline, shipped React, stylesheet and reproducible package suites pass. Installed-definition checks have zero syntax/ordinary type errors and fifteen injected `meta` diagnostics (the existing fourteen plus CheckBox). Native checkbox geometry/tooltip, future-offer decline delivery, disable/re-enable and real save/reload need game UAT. No staging/gameplay-installed files or live Mod Hub listing were updated.
+
+- At the maintainer’s request, revision 17 was subsequently copied to the existing `staging_area/tf3_subsidy_manager_1` after a verified full backup under `staging_backups`. All nine allowlisted runtime files match repository sources; existing numbered gallery images and uploader linkage are unchanged. The separate gameplay-installed local `mods` copy remains revision 13. No upload/publication or real-game/native uploader validation was performed. Fresh checkbox/gallery screenshots are pending maintainer UAT.
+
+- Revision 17 maintainer UAT showed an excessive one-line tooltip and a checkbox below navigation. The checkbox now follows Refresh in the same horizontal controls row with the short label “Auto-decline”; its concise tooltip has two explicit lines. This layout/copy adjustment retains revision 17 for the same pending update and needs fresh real-game visual confirmation.
+
+- The maintainer confirmed the revised inline checkbox and multiline tooltip render better in-game, then requested removing the final persistence/undo line. The tooltip now contains only the default/check interval and preservation of existing offers/accepted tasks.
+
+- The maintainer explicitly identifies the current staged revision 17 as v1.2.0. VERSION, README, changelog, release notes, Mod Hub description history and package expectations use 1.2.0. Internal revision remains 17 for this same pending release. No public release/tag or upload is implied by assigning the version.
+
+- v1.2.0 maintainer UAT: with Auto-decline enabled no offers remained; after disabling it, new offers arrived. The supplied current real-game capture confirms the inline checkbox, checked state and two-line tooltip at the tested scale. This is observed gameplay behaviour, not exhaustive retention/save-reload/platform testing.
+- Added the supplied capture to the gallery as `docs/screenshots/auto-decline.png` and numbered publication preview `_metadata/7.png`, using deterministic cropping/resizing of real pixels and the existing caption-band style. Existing gallery entries remain unchanged. Package checks verify all eight previews against their approved source images.

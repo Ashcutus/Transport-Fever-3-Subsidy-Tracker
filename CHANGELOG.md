@@ -1,44 +1,39 @@
-# Release Notes
+# Changelog
 
-## v1.1.2 — Cleaner overview messaging (revision 16)
+## v1.2.0 — Auto-decline new offers
 
-- History shows outcomes once in Status; removed the redundant Result column.
-- Missing overview values use a dash with an explanatory tooltip, including missing progress.
-- Read failures offer a clear Refresh action; empty History describes only records retained by the game.
+- Added an optional Auto-decline toggle beside Refresh, off by default, with a short explanatory tooltip.
+- Your Auto-decline choice is saved per game. Existing offers and accepted tasks are preserved.
+- Reorganised this description into an overview, usage guidance and release history.
+- Added a real-game gallery image showing Auto-decline and its tooltip.
 
-## v1.1.2 — More resilient progress reads
+## v1.1.2 — Clearer overview and more reliable progress
 
-- If a full native subsidy card fails to load, retry the game’s lightweight card helper so available progress and rewards can still appear. This recovery also covers count-based tasks.
-- Worker progress keeps genuine native zero values as “0% Workers”; unreadable data remains explicitly unavailable.
-- Release checks now verify every packaged gallery image against its current approved source, preventing older previews from slipping into the ZIP.
+- History shows each outcome once in Status, without a duplicate Result column.
+- Missing values, including progress, use a dash with an explanatory tooltip.
+- Clearer guidance when data cannot be read, and a more accurate empty History message.
+- More available progress and rewards remain visible when a subsidy is difficult to read.
+- Genuine zero worker progress appears as 0% Workers.
 
 ## v1.1.1 — Clearer guidance
 
-- Clearer Mod Hub instructions explain where to find offers, follow accepted tasks and review past outcomes.
+- Clearer instructions for finding offers, following accepted tasks and reviewing past outcomes.
 - Clarified that Refresh updates the overview while the manager is open.
-- Includes all v1.1.0 table, empty-view and gallery improvements below.
 
-## v1.1.0 — A clearer overview, with a fresh look
+## v1.1.0 — Easier-to-read tables and a fresh look
 
-- Easier-to-read rewards: payments, income bonuses and other effects now appear on separate lines. Long values and bonus durations wrap instead of being cut off.
-- Better table spacing: rebalanced Reward and Deadline / Time Remaining widths, with rows growing to fit their text. The shared layout improvements cover In Progress, Offered and History.
-- Illustrated empty views: each section now has a contract-and-route illustration, a friendly headline and useful guidance. The panels are centred and fit the compact window when all sections are empty.
-- Friendlier Mod Hub information: rewritten the summary and description around what the mod helps you do and how to use it.
-- A refreshed gallery: clean, consistent images made from real game captures, showing the updated tables, toolbar icon and all three compact empty views, with a clear benefit in each image.
-- New cover artwork with a transport scene, a clearer title and the tagline “Your next opportunity, in view.”
+- Payments, bonuses and other effects appear on separate lines. Long rewards and durations wrap instead of being cut off.
+- Better reward and deadline spacing, with rows that grow to fit their text.
+- Illustrated empty views with section-specific guidance and a compact window when every section is empty.
+- Refreshed cover and gallery showing the toolbar, updated tables and empty views.
 
-## v1.0.1 — Metadata Update
+## v1.0.1 — Description update
 
-- Improved Mod Hub description and summary.
-- No gameplay or functionality changes.
+- Improved the Mod Hub summary and description.
 
-## v1.0.0 — Initial Release
+## v1.0.0 — Initial release
 
-- Native Subsidy Manager toolbar integration.
-- Offered, In Progress and History views with counts.
-- Compact subsidy tables with native resource information.
-- Open subsidies directly in TF3's native detail UI, including map highlighting.
-- Native Accept/Decline workflow preserved.
-- Manual Refresh.
-- Compact window preset when the entire overview is empty.
-- No simulation changes or custom subsidy state.
+- Added the toolbar launcher and Offered, In Progress and History views with counts.
+- Compare subsidy resources, requirements, rewards and deadlines in one place.
+- Open the game’s subsidy details and map highlights directly from a row, with the usual Accept and Decline controls.
+- Manual Refresh and a movable, pinnable window with a compact all-empty layout.

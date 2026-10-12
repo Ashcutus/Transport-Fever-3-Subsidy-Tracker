@@ -10,6 +10,7 @@ local DEBUG_LOGGING = false
 
 local SUBVENTION_SCRIPT = "::/game_mechanics/subventions/subventions.gs"
 local MOD_ID = "tf3_subsidy_manager"
+local AUTO_DECLINE_EVENT = "tf3SubsidyManagerAutoDecline"
 local OFFERS_OPENED_EVENT = "tf3SubsidyManagerOffersOpened"
 
 local record OfferBadgeState
@@ -26,7 +27,7 @@ local function offerIdentity(record : ISubvention) : string
 	return string.format("%d:%s|%.17g|%.17g", #record.id, record.id, record.uid, record.spawnTime)
 end
 
-local function queryOfferIdentities() : {string : boolean}
+local function queryOfferIdentities(uids : {string : integer}) : {string : boolean}
 	local entity = api.engine.system.gameScriptSystem.getEntityForGameScript(SUBVENTION_SCRIPT)
 	if not entity or not api.engine.entityExists(entity) then return nil end
 	local component = api.engine.getComponent(entity, api.type.ComponentType.GAME_SCRIPT) as Engine.Component.GameScript<SubventionState>
@@ -35,7 +36,10 @@ local function queryOfferIdentities() : {string : boolean}
 	-- Read only identity fields; never format cards or copy other subsidy collections.
 	for _index, record in ipairs(component.state.proposedSubventions) do
 		local key = offerIdentity(record)
-		if key then offers[key] = true end
+		if key then
+			offers[key] = true
+			if uids then uids[key] = record.uid as integer end
+		end
 	end
 	return offers
 end
@@ -70,13 +74,67 @@ local function saveOfferBadge(badge : OfferBadgeState) : boolean
 	return ok
 end
 
+local record AutoDeclineState
+	enabled : boolean
+	initialized : boolean
+	offers : {string : boolean}
+	dirty : boolean
+end
+
+local function loadAutoDecline() : AutoDeclineState
+	local initial : AutoDeclineState = { enabled = false, initialized = false, offers = {}, dirty = false }
+	local ok, saved = pcall(function() : any return api.gui.game.getGuiSaveData(MOD_ID) end)
+	if not ok or type(saved) ~= "table" then return initial end
+	local setting = (saved as table).autoDecline as table
+	if type(setting) ~= "table" or setting.version ~= 1 or type(setting.enabled) ~= "boolean" or type(setting.offers) ~= "table" then return initial end
+	for key, value in pairs(setting.offers as {any : any}) do
+		if type(key) ~= "string" or value ~= true then return initial end
+	end
+	initial.enabled = setting.enabled as boolean
+	initial.initialized = setting.initialized == true
+	for key, _value in pairs(setting.offers as {string : boolean}) do initial.offers[key] = true end
+	return initial
+end
+
+local function saveAutoDecline(setting : AutoDeclineState) : boolean
+	return pcall(function()
+		local saved = api.gui.game.getGuiSaveData(MOD_ID)
+		local data : {any : any} = {}
+		if type(saved) == "table" then for key, value in pairs(saved) do data[key] = value end end
+		local offers : {string : boolean} = {}
+		for key, value in pairs(setting.offers) do offers[key] = value end
+		data.autoDecline = { version = 1, enabled = setting.enabled, initialized = setting.initialized, offers = offers }
+		api.gui.game.setGuiSaveData(MOD_ID, data)
+	end)
+end
+
 local OfferBadgeIcon = react.RegisterWrapperRecipe("TF3SubsidyManagerOfferBadgeIcon", builtin.Component, function(_params : Builtin.ComponentParam) : TreeNodeId
 	local tracked : ReactRefT<OfferBadgeState> = react.useRefLazy(loadOfferBadge)
+	local automatic : ReactRefT<AutoDeclineState> = react.useRefLazy(loadAutoDecline)
 	local pending : ReactStateT<boolean> = engineReactUtil.useStepStateTimer(function() : boolean
 		local badge = tracked:get()
-		local ok, result = pcall(queryOfferIdentities)
+		local uids : {string : integer} = {}
+		local ok, result = pcall(queryOfferIdentities, uids)
 		if not ok or not result then return badge.pending end
 		local offers = result as {string : boolean}
+		local setting = automatic:get()
+		local seen : {string : boolean} = {}
+		for key, _value in pairs(offers) do
+			local handled = true
+			if setting.enabled and setting.initialized and not setting.offers[key] then
+				-- Match the vanilla Decline action; never mutate GAME_SCRIPT tables.
+				handled = pcall(function()
+					api.cmd.sendCommand(api.cmd.makeScriptingSendEventCmd("", "Subvention", "onDecline", { uid = uids[key] }))
+				end)
+			end
+			if handled then seen[key] = true end
+		end
+		if not setting.initialized then setting.dirty = setting.enabled or setting.dirty end
+		for key, _value in pairs(seen) do if not setting.offers[key] then setting.dirty = setting.enabled or setting.dirty end end
+		for key, _value in pairs(setting.offers) do if not seen[key] then setting.dirty = setting.enabled or setting.dirty end end
+		setting.initialized, setting.offers = true, seen
+		-- Retry failed persistence on valid ticks, preserving independent badge data.
+		if setting.dirty then setting.dirty = not saveAutoDecline(setting) end
 		local changed = not badge.initialized
 		for key, _value in pairs(offers) do
 			if not badge.offers[key] then
@@ -89,6 +147,16 @@ local OfferBadgeIcon = react.RegisterWrapperRecipe("TF3SubsidyManagerOfferBadgeI
 		if changed or badge.dirty then badge.dirty = not saveOfferBadge(badge) end
 		return badge.pending
 	end, 5)
+	react.onEvent(AUTO_DECLINE_EVENT, function(_name : string, value : any)
+		if type(value) ~= "boolean" then return end
+		local setting = automatic:get()
+		setting.enabled = value as boolean
+		-- Establish a fresh baseline so enabling never declines existing offers.
+		local ok, offers = pcall(queryOfferIdentities, nil)
+		setting.initialized = ok and offers ~= nil
+		setting.offers = setting.initialized and offers as {string : boolean} or {}
+		setting.dirty = not saveAutoDecline(setting)
+	end)
 	react.onEvent(OFFERS_OPENED_EVENT, function(_name : string, data : any)
 		if type(data) ~= "table" then return end
 		local offers : {string : boolean} = {}
@@ -458,6 +526,7 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 	local snapshot : ReactStateT<Snapshot> = react.useStateLazy(readSnapshot)
 	local selectedTab : ReactStateT<integer> = react.useState(1)
 
+	local autoDecline : ReactStateT<boolean> = react.useStateLazy(function() : boolean return loadAutoDecline().enabled end)
 	local generation : ReactStateT<integer> = react.useState(0)
 	local function refresh()
 		snapshot:set(readSnapshot())
@@ -504,6 +573,15 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 				meta = { class = "secondary", tooltip = _("tf3_subsidy_manager_refresh_tooltip") },
 				content = builtin.TextView { text = _("tf3_subsidy_manager_refresh") },
 				onClick = refresh,
+			},
+			builtin.CheckBox {
+				meta = { tooltip = _("tf3_subsidy_manager_auto_decline_tooltip") },
+				label = _("tf3_subsidy_manager_auto_decline"),
+				value = autoDecline:old() and 1 or 0,
+				onValueChange = function(value : integer)
+					autoDecline:set(value == 1)
+					react.fireEvent(nil, AUTO_DECLINE_EVENT, value == 1)
+				end,
 			},
 		},
 	}

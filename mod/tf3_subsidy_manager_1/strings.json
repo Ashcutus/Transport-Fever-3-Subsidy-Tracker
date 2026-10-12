@@ -31,6 +31,8 @@
         "tf3_subsidy_manager_empty_active_hint": "No tasks in progress. Look in Offered for your next opportunity.",
         "tf3_subsidy_manager_empty_offers_hint": "No offers right now. Carry on with your routes and use Refresh to check again.",
         "tf3_subsidy_manager_empty_history_hint": "Successful and failed subsidies appear here while the game retains them.",
-        "tf3_subsidy_manager_missing_value_tooltip": "Not provided by the game’s overview data."
+        "tf3_subsidy_manager_missing_value_tooltip": "Not provided by the game’s overview data.",
+        "tf3_subsidy_manager_auto_decline": "Auto-decline",
+        "tf3_subsidy_manager_auto_decline_tooltip": "Declines new offers every 5 seconds. Off by default.\nKeeps existing offers and accepted tasks."
     }
 }

@@ -58,7 +58,7 @@ function react.useStateLazy(fn)
 end
 function react.useState(value) return react.useStateLazy(function() return value end) end
 local builtin = {type = {Orientation = {Vertical = 1, Horizontal = 2}, ImageViewScaling = {AutoFit = 1}, ScrollBarPolicy = {AlwaysOff = 1, AsNeededButAlwaysReserveSpace = 2}}}
-for _, name in ipairs({"TextView", "BoxLayout", "Button", "ImageView", "Window", "ProgressBar", "ToolButton", "ScrollArea", "Component", "ToggleButtonGroup", "ColumnDesc", "DataTable"}) do
+for _, name in ipairs({"TextView", "BoxLayout", "Button", "ImageView", "Window", "ProgressBar", "ToolButton", "ScrollArea", "Component", "ToggleButtonGroup", "CheckBox", "ColumnDesc", "DataTable"}) do
     builtin[name] = function(...) local args = {...}; local params = args[#args]; params.kind = name
         if name == "ProgressBar" then
             assert(params.text == nil and type(params.label) == "string", "Native ProgressBar uses label, not text")

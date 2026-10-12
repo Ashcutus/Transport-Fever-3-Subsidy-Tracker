@@ -103,7 +103,7 @@ local function check(code, expectWrapper)
     local badgeId = assert(ids.TF3SubsidyManagerOfferBadgeIcon)
     assert(registry.recipeMetas[badgeId].innerRecipeId == registry.builtin.Component)
     function context:declareRefLazy(fn) local value = fn(); return {get = function() return value end} end
-    function context:onEvent(_, name) assert(name == "tf3SubsidyManagerOffersOpened") end
+    function context:onEvent(_, name) assert(name == "tf3SubsidyManagerOffersOpened" or name == "tf3SubsidyManagerAutoDecline") end
     context.currentRecipeId = badgeId
     registry.recipes[badgeId](context, {props = {{}}})
     local badgeComponent = nodes[context.result[1]]

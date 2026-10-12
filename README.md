@@ -15,7 +15,7 @@ Compare offers, follow the tasks you've accepted, and see how your subsidies tur
 - **Review your results.** History brings together successful and failed subsidies while the game retains them.
 - **Know when something new arrives.** A small dot on the toolbar icon marks new offers since you last opened the manager.
 
-The mod keeps the game's subsidy rules and rewards as they are. You decide which opportunities suit your network.
+Prefer to skip future offers? Enable **Auto-decline** in the manager. It is off by default, applies only to offers arriving after you enable it, and saves your choice for this game. Existing offers and accepted tasks are left alone. It checks about every five seconds using the game's normal Decline action. Turn it off to choose future offers yourself; declined offers cannot be restored.
 
 ## Getting started
 
@@ -40,6 +40,10 @@ The gallery below uses real game captures. The cover above is promotional artwor
 
 ![The contract icon beside Industry Statistics opens Subsidy Manager](docs/screenshots/toolbar.png)
 
+### Skip new offers when you want to
+
+![Auto-decline enabled beside Refresh, with its tooltip explaining that existing offers and accepted tasks are kept](docs/screenshots/auto-decline.png)
+
 ### Keep your next move in view
 
 ![In Progress shows real tasks, progress, multiline rewards and complete deadlines](docs/screenshots/active.png)
@@ -61,9 +65,13 @@ Each section has its own guidance, with a compact window when the entire overvie
 
 </details>
 
+## What's new in v1.2.0
+
+An optional **Auto-decline new offers** toggle, with a tooltip and a saved per-game preference. The Mod Hub description now includes notable recent changes, including clearer History, more reliable progress reads, wrapped rewards and illustrated empty views.
+
 ## What's new in v1.1.2
 
-More resilient subsidy reads: when the game's full card helper fails, the manager retries its lightweight helper to retain available progress and rewards. The release ZIP includes the current cover and all six gallery images, checked against their approved sources. See the [changelog](CHANGELOG.md) for the full update.
+Clearer History with one status per outcome, explanatory tooltips for missing values, and more reliable progress and reward reads. Genuine zero worker progress appears as “0% Workers”. See the [changelog](CHANGELOG.md) for the release history.
 
 ## A few things to know
 

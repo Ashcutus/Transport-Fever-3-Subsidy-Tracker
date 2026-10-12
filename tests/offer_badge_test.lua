@@ -21,6 +21,7 @@ end
 local function offer(uid, id, time)
     return {id = id or "native-offer.res", uid = uid, spawnTime = time or 100, data = {}}
 end
+local commands, commandFailure = {}, false
 local saved, component, writes, cardReads, engineReads = nil, nil, 0, 0, 0
 local getFailure, setFailure, engineFailure, unavailable = false, false, false, false
 local function world(offers)
@@ -34,7 +35,7 @@ local function boot()
     builtin = {type = {Orientation = {Horizontal = 1, Vertical = 2}, ImageViewScaling = {AutoFit = 1},
         FloatingLayoutOverflowMode = {Overflow = 1}, ScrollBarPolicy = {AlwaysOff = 1, AsNeededButAlwaysReserveSpace = 2}}}
     for _, name in ipairs({"Component", "FloatingLayout", "FloatingLayoutChild", "BoxLayout", "ImageView", "TextView",
-        "Window", "ScrollArea", "Button", "ToolButton", "ToggleButtonGroup", "ColumnDesc", "DataTable"}) do
+        "Window", "ScrollArea", "Button", "ToolButton", "ToggleButtonGroup", "CheckBox", "ColumnDesc", "DataTable"}) do
         builtin[name] = function(...) local args = {...}; local node = args[#args]; node.kind = name; return node end
     end
     react = {}
@@ -89,7 +90,16 @@ local function boot()
         end}, {__index = _G})
         engineReact = assert(load(nativeEngineCode, "native-engine-react", "t", nativeEnv))()
     end
-    local api = {type = {ComponentType = {GAME_SCRIPT = 1}}, engine = {
+    local api = {cmd = {
+        makeScriptingSendEventCmd = function(namespace, target, event, data)
+            assert(namespace == "" and target == "Subvention" and event == "onDecline")
+            return copy(data)
+        end,
+        sendCommand = function(command)
+            if commandFailure then error("command unavailable") end
+            commands[#commands + 1] = command
+        end,
+    }, type = {ComponentType = {GAME_SCRIPT = 1}}, engine = {
         system = {gameScriptSystem = {getEntityForGameScript = function(path)
             assert(path == "::/game_mechanics/subventions/subventions.gs")
             engineReads = engineReads + 1
@@ -250,3 +260,46 @@ if nativeEngineCode then
     assert(engineReads == before, "Native timer must stop reading when component expires")
 end
 print("PASS: offer badge baseline/new/unchanged offers, sticky dismissal/removal, mount acknowledgement, GUI persistence/reload/errors, identity-only native timer and scoped toolbar overlay")
+
+-- Auto-decline shares the native timer and only acts on future valid proposed offers.
+local loadEnabled = false
+local function toggle(value)
+    local tree = render(windowRecipe, windowContext)
+    local checkbox = tree.content.children[1].children[3]
+    assert(tree.content.children[1].children[2].kind == "Button", "Toggle follows Refresh on the same row")
+    assert(checkbox.kind == "CheckBox" and checkbox.value == (loadEnabled and 1 or 0))
+    assert(checkbox.meta.tooltip == "tf3_subsidy_manager_auto_decline_tooltip")
+    checkbox.onValueChange(value and 1 or 0)
+    loadEnabled = value
+end
+reset({offer(1)}, {unrelated = {keep = true}}); commands = {}; loadEnabled = false
+assert(not badge()); poll(); assert(#commands == 0)
+toggle(true); assert(saved.autoDecline.enabled and saved.unrelated.keep)
+poll(); assert(#commands == 0, "Existing offers must survive enabling")
+component = world({offer(1), offer(2), offer(-1), offer(0/0), offer(3, "", 100)})
+component.state.activeSubventions = {offer(8)}
+local beforeCards = cardReads
+poll(); assert(#commands == 1 and commands[1].uid == 2 and cardReads == beforeCards)
+poll(); assert(#commands == 1, "Do not repeatedly send while engine delivery is pending")
+-- Opening/acknowledging the badge must not erase the separate auto-decline baseline.
+component = world({offer(1), offer(2), offer(4)})
+open(); poll(); assert(#commands == 2 and commands[2].uid == 4)
+boot(); badge(); poll(); assert(#commands == 2, "Persist dispatched identities across reload")
+toggle(false); component = world({offer(5)}); poll(); assert(#commands == 2)
+toggle(true); poll(); assert(#commands == 2, "Re-enabling establishes a fresh baseline")
+component = world({offer(5), offer(6)}); commandFailure = true
+poll(); assert(#commands == 2)
+commandFailure = false; poll(); assert(#commands == 3 and commands[3].uid == 6)
+setFailure = true; toggle(false); assert(saved.autoDecline.enabled)
+setFailure = false; poll(); assert(not saved.autoDecline.enabled, "Retry saving disabled preference")
+-- Failed enable reads baseline the first valid result instead of declining existing offers.
+engineFailure = true; toggle(true); poll(); engineFailure = false
+component = world({offer(7)}); poll(); assert(#commands == 3)
+component = world({offer(7), offer(9)}); poll(); assert(#commands == 4 and commands[4].uid == 9)
+for _, malformed in ipairs({false, {version = 0}, {version = 1, enabled = "yes", offers = {}},
+    {version = 1, enabled = true, offers = {bad = false}}}) do
+    reset({offer(10)}, {autoDecline = malformed}); loadEnabled = false
+    badge(); poll(); assert(#commands == 4, "Malformed preferences default off")
+    toggle(false)
+end
+print("PASS: auto-decline default off, future-only commands, validation, no duplicate dispatch, independent acknowledgement, reload, disable/re-enable, command/save/query failures")
