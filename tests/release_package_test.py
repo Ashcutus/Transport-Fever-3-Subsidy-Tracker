@@ -34,7 +34,7 @@ with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as se
         assert "version" not in manifest and "platforms" not in manifest
         assert manifest["cosmetic"] is False, "Recovery changes simulation behaviour"
         assert manifest["runScript"]["fileName"] == "tf3_subsidy_manager::/plugins/subsidy_manager/setup.script@runFn"
-        for file in ("setup.script.lua", "recovery.script.lua", "launcher.res.lua"):
+        for file in ("setup.script.lua", "recovery.script.lua", "controller.res.lua"):
             assert prefix + "content/plugins/subsidy_manager/" + file in names
         info = json.loads(package.read(prefix + "_metadata/modinfo.json"))
         assert info["name"] == "Subsidy Manager" and len(info["name"]) <= 32
@@ -79,10 +79,10 @@ with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as se
             preview = prefix + f"_metadata/{index}.png"
             assert package.read(preview) == (ROOT / "docs/screenshots" / f"{source}.png").read_bytes(), f"Stale gallery: {preview}"
         # The official extension must resolve the exported plugin recipe.
-        launcher = package.read(prefix + "content/plugins/subsidy_manager/launcher.res.lua").decode()
+        launcher = package.read(prefix + "content/plugins/subsidy_manager/controller.res.lua").decode()
         assert 'type = "react-plugin ::MainModButtonAreaExtension"' in launcher
-        assert 'main.script@ModsLauncher' in launcher
-        assert 'ModsLauncher = ModsLauncher' in script
+        assert 'main.script@ControllerHost' in launcher
+        assert 'ControllerHost = ControllerHost' in script
         assert set(names) >= expected
         assert all(name in expected or re.fullmatch(re.escape(prefix) + r"_metadata/\d+\.png", name) for name in names)
 print("PASS: runtime archive hygiene, public/internal version distinction, metadata, translations, MIT notice and reproducible ZIP/checksum")

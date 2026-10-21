@@ -935,19 +935,9 @@ local function openManager(gameCtx : GameContext)
 	gameCtx.toolStack:get():getApi().push(ManagerTool, nil, { gameCtx = gameCtx }, true)
 end
 
--- The official Mods-area extension remains reachable when the statistics tray
--- is hidden/replaced. Its controller owns the single existing five-second timer.
-local ModsLauncher = react.RegisterPluginRecipe(modButtonArea.MainModButtonAreaExtension, "TF3SubsidyManagerModsLauncher", function() : TreeNodeId
-	return builtin.BoxLayout {
-		children = {
-			ManagerController {},
-			builtin.Button {
-				meta = { id = "tf3-subsidy-manager.mods-button", tooltip = _("tf3_subsidy_manager_button_tooltip") },
-				content = builtin.TextView { text = _("tf3_subsidy_manager_title") },
-				onClick = function() openManager(launcherContext) end,
-			},
-		},
-	}
+-- Mount the single controller through the native extension, without adding UI.
+local ControllerHost = react.RegisterPluginRecipe(modButtonArea.MainModButtonAreaExtension, "TF3SubsidyManagerControllerHost", function() : TreeNodeId
+	return builtin.BoxLayout { children = { ManagerController {} } }
 end)
 
 local record ToolbarParams
@@ -986,7 +976,7 @@ local function installToolbar(_replacementApi : ReactReplacementApi)
 		local gameCtx = launcherContext
 		if not gameCtx or params.toolStack ~= gameCtx.toolStack then
 			if not contextWarningShown then
-				log.warning("[Subsidy Manager] Toolbar launcher could not find its native game context; use the Mods-area launcher after loading.")
+				log.warning("[Subsidy Manager] Toolbar launcher could not find its native game context.")
 				contextWarningShown = true
 			end
 			return node
@@ -1016,4 +1006,4 @@ local function installToolbar(_replacementApi : ReactReplacementApi)
 	end
 end
 
-return { installToolbar = installToolbar, ModsLauncher = ModsLauncher }
+return { installToolbar = installToolbar, ControllerHost = ControllerHost }

@@ -177,21 +177,15 @@ local function check(code, expectWrapper)
     local stackNode = nodes[nodes[context.result[1]].props.props[1].children[1]]
     assert(stackNode.recipeId == registry.builtin.ToolStack and stackNode.props.props[1] == nativeParams)
     assert(stackNode.props.style == style and nodes[ref.value.node] == stackNode)
-    local pluginId = assert(ids.TF3SubsidyManagerModsLauncher)
+    local pluginId = assert(ids.TF3SubsidyManagerControllerHost)
     assert(registry.recipeMetas[pluginId] == nil)
     context.currentRecipeId = pluginId
     registry.recipes[pluginId](context, {props = {{}}})
     local pluginLayout = nodes[context.result[1]]
     assert(pluginLayout.recipeId == registry.builtin.BoxLayout)
     local pluginChildren = pluginLayout.props.props[1].children
-    assert(#pluginChildren == 2 and nodes[pluginChildren[1]].recipeId == ids.TF3SubsidyManagerController)
-    local buttonNode = nodes[pluginChildren[2]]
-    assert(buttonNode.recipeId == registry.builtin.WithComponentParams)
-    local fallbackButton = nodes[buttonNode.props.props[1].item]
-    assert(fallbackButton.recipeId == registry.builtin.Button)
-    fallbackButton.props.props[1].onClick()
-    assert(#pushes == 1 and pushes[1].tool.name == "TF3SubsidyManager"
-        and pushes[1].param.gameCtx == gameCtx and pushes[1].stacking == true)
+    assert(#pluginChildren == 1 and nodes[pluginChildren[1]].recipeId == ids.TF3SubsidyManagerController)
+    assert(#pushes == 0, "Background host must not open a window")
     -- Controller returns an empty layout; no visible overlay or extra window.
     context.currentRecipeId = ids.TF3SubsidyManagerController
     registry.recipes[context.currentRecipeId](context, {props = {{}}})

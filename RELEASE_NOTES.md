@@ -1,10 +1,9 @@
 # Release Notes
 
-## v1.3.1 — More reliable access
+## v1.3.1 — More reliable toolbar
 
-- Added a Subsidy Manager button in the game's native Mods area, providing another way to open the manager if the bottom-bar icon is unavailable.
 - Improved initialization of the bottom-bar launcher.
-- Auto-decline and saved-offer actions stay connected through the Mods-area launcher when the bottom-bar icon is absent.
+- Auto-decline and saved-offer handling remain active independently of the toolbar icon.
 
 ## v1.3.0 — Recover previously hidden subsidies
 

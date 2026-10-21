@@ -343,12 +343,10 @@ local stackParams = {defaultToolParam = {gameCtx = gameCtx}, defaultToolKey = "_
 assert(builtin.ToolStack(stackRef, stackStyle, stackParams) == stackParams)
 assert(stackCalls[#stackCalls][1] == stackRef and stackCalls[#stackCalls][2] == stackStyle
     and stackCalls[#stackCalls][3] == stackParams, "Native ToolStack refs/styles/params changed")
--- The official launcher opens without a GameBar or Industry Statistics call.
-local fallback = exports.ModsLauncher({}).children[2]
-assert(fallback.meta.id == "tf3-subsidy-manager.mods-button")
-fallback.onClick(); assert(visible and added == 1)
-tree.onClose(); assert(not mounted)
-added = 0
+-- The native extension hosts logic only, with no visible Mods-area button.
+local host = exports.ControllerHost({})
+assert(host.kind == "BoxLayout" and #host.children == 1)
+assert(host.children[1].kind == "BoxLayout" and #host.children[1].children == 0)
 -- Auxiliary/malformed tool stacks must not erase the real context.
 for _, params in ipairs({{}, {defaultToolParam = false}, {defaultToolParam = {}}, {defaultToolParam = {gameCtx = {}}}}) do
     assert(builtin.ToolStack(params) == params)
