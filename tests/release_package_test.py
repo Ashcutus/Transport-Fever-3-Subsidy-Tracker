@@ -74,7 +74,7 @@ with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as se
                 assert not re.search(r"/home/|/tmp/|\b(?:copilot|codex|openai|gpt|proof of concept)\b", text, re.I), name
         expected = {prefix + path for path in builder.RUNTIME_FILES}
         # Gallery must match the approved source captures, not only valid PNG headers.
-        gallery = ("hero", "toolbar", "active", "history", "empty-active", "empty-offered", "empty-history", "auto-decline")
+        gallery = ("hero", "toolbar", "active", "history", "empty-active", "empty-offered", "empty-history", "auto-decline", "missed-offers")
         for index, source in enumerate(gallery):
             preview = prefix + f"_metadata/{index}.png"
             assert package.read(preview) == (ROOT / "docs/screenshots" / f"{source}.png").read_bytes(), f"Stale gallery: {preview}"

@@ -2,6 +2,7 @@
 
 ## v1.3.0 — Recover previously hidden subsidies
 
+- Updated the real-game gallery with Auto-decline guidance and the missed-offer indicator.
 - When missed offers become available after switching Auto-decline off, the toolbar icon shows its yellow dot too. Opening the manager clears the toolbar dot; opening Offered clears its separate dot.
 - Turning Auto-decline off refreshes the overview immediately and updates it again when the availability check finishes.
 - Auto-decline saves and declines new offers before they reach the offer notification flow, after the game confirms the option. Previously hidden offers do not set the manager’s toolbar dot.
