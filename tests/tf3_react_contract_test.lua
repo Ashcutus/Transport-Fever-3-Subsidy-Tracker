@@ -104,7 +104,7 @@ local function check(code, expectWrapper)
     assert(registry.recipeMetas[badgeId].innerRecipeId == registry.builtin.Component)
     function context:declareRef(value) return {get = function() return value end, set = function(_, nextValue) value = nextValue end} end
     function context:declareRefLazy(fn) local value = fn(); return {get = function() return value end} end
-    function context:onEvent(_, name) assert(name == "tf3SubsidyManagerOffersOpened" or name == "tf3SubsidyManagerAutoDecline" or name == "tf3SubsidyManagerArchiveRequest") end
+    function context:onEvent(_, name) assert(name == "tf3SubsidyManagerOffersOpened" or name == "tf3SubsidyManagerAutoDecline" or name == "tf3SubsidyManagerArchiveRequest" or name == "tf3SubsidyManagerArchiveReply") end
     context.currentRecipeId = badgeId
     registry.recipes[badgeId](context, {props = {{}}})
     -- Execute the shipped two-phase queues. Restricted engine reads must not

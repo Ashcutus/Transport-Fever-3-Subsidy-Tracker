@@ -222,6 +222,20 @@ local OfferBadgeIcon = react.RegisterWrapperRecipe("TF3SubsidyManagerOfferBadgeI
 		sendArchiveRequest("configure", nil, (previous.sequence or 0) as number, setting.enabled, not setting.enabled)
 		synchronized:set(true)
 	end)
+	react.onEvent(ARCHIVE_REPLY_EVENT, function(_name : string, value : any)
+		if type(value) ~= "table" or automatic:get().enabled then return end
+		local reply = value as {any : any}
+		local review = reply.action == "review" or (reply.action == "configure" and reply.enabled == false and reply.review == true)
+		if not review or reply.success ~= true or reply.reason == "unavailable" or type(reply.count) ~= "number" then return end
+		local count = reply.count as number
+		if count <= 0 or not (count < math.huge) or count ~= math.floor(count) then return end
+		local badge = tracked:get()
+		if not badge.pending then
+			badge.pending = true
+			badge.dirty = not saveOfferBadge(badge)
+		end
+		pending:set(true)
+	end)
 	react.onEvent(OFFERS_OPENED_EVENT, function(_name : string, data : any)
 		if type(data) ~= "table" then return end
 		local offers : {string : boolean} = {}

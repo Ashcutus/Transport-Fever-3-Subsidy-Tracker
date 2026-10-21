@@ -419,13 +419,19 @@ component.state.tf3SubsidyManagerArchive.response = {sequence = 1, action = 'con
 component.state.tf3SubsidyManagerArchive.notice = copy(component.state.tf3SubsidyManagerArchive.response)
 poll(); tree = render(windowRecipe, windowContext)
 assert(not feedback(tree) and offeredDot(tree).text == ' ●', 'Resume availability belongs on Offered, without a banner')
+assert(badge() and saved.offerBadge.pending, 'A confirmed positive missed-offer review must also light the toolbar dot')
 local offeredButton = tree.content.children[1].children[1].buttons[2]
 assert(offeredButton.content.layout.children[1].text == 'tf3_subsidy_manager_offered (2)')
 assert(offeredButton.meta.tooltip == 'tf3_subsidy_manager_hidden_available')
 assert(#component.state.proposedSubventions == 0, 'Review must not recreate any offer')
 -- The unread Offered marker survives closing/reloading the manager.
-boot(); badge(); poll(); tree = render(windowRecipe, windowContext)
+boot(); assert(badge() and saved.offerBadge.pending); poll(); tree = render(windowRecipe, windowContext)
 assert(offeredDot(tree) and not feedback(tree))
+-- Match the normal new-offer badge: successful manager opening clears the
+-- toolbar marker, while Offered keeps its separate unread marker until visited.
+for _, fn in ipairs(windowContext.mounts) do fn() end
+assert(not badge() and not saved.offerBadge.pending)
+assert(offeredDot(render(windowRecipe, windowContext)))
 tree.content.children[1].children[1].onValueChange(2)
 tree = render(windowRecipe, windowContext)
 assert(not feedback(tree) and not offeredDot(tree) and saved.archiveAcknowledged == 1 and saved.unrelated == 'keep')
@@ -686,4 +692,33 @@ local detailCount = #detailEvents
 automaticTable.columns[1].recipe({userParam = automaticTable.userParam, rowKey = 1}).children[1].onClick()
 assert(#detailEvents == detailCount + 1 and detailEvents[#detailEvents].nonEntity == 'subsidy_401', 'Auto-refreshed cells must select the new record')
 print('PASS: immediate disable refresh before confirmation, latest counts/rows, stable tab, rebuilt cells and confirmed review refresh')
+
+-- Toolbar reminders come only from a successful, positive resume review.
+reset({}, {unrelated = 'preserve'})
+badge(); poll()
+local replyListener = badgeContext.events.tf3SubsidyManagerArchiveReply
+for _, reply in ipairs({
+    {action = 'configure', enabled = false, review = true, success = true, count = 0},
+    {action = 'configure', enabled = false, review = true, success = false, count = 2},
+    {action = 'review', success = true, reason = 'unavailable', count = 2},
+    {action = 'configure', enabled = true, review = false, success = true, count = 2},
+    {action = 'configure', enabled = false, review = false, success = true, count = 2},
+    {action = 'recover', success = true, count = 2},
+    {action = 'review', success = true, count = math.huge},
+    {action = 'review', success = true, count = 0/0},
+    {action = 'review', success = true, count = 0.5},
+}) do
+    replyListener('tf3SubsidyManagerArchiveReply', reply)
+    assert(not badge() and not saved.offerBadge.pending)
+end
+setFailure = true
+replyListener('tf3SubsidyManagerArchiveReply', {action = 'review', success = true, count = 2})
+assert(badge() and not saved.offerBadge.pending, 'A failed save must not hide the in-memory reminder')
+setFailure = false
+assert(poll() and saved.offerBadge.pending and saved.unrelated == 'preserve', 'Reminder persistence must retry without losing other fields')
+reset({}, {autoDecline = {version = 1, enabled = true, offers = {}}})
+badge(); poll()
+badgeContext.events.tf3SubsidyManagerArchiveReply('tf3SubsidyManagerArchiveReply', {action = 'review', success = true, count = 2})
+assert(not badge() and not saved.offerBadge.pending, 'Never raise a missed-offer reminder while suppression is enabled')
+print('PASS: toolbar dot for confirmed revealed offers, quiet zero/failed/sync replies, valid counts and persistence retries')
 print('PASS: stale acknowledgement rejection, authoritative saved simulation mode and expired-toolbar join cancellation')
