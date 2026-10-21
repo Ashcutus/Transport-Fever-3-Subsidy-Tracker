@@ -12,12 +12,12 @@ spec = importlib.util.spec_from_file_location("package_release", ROOT / "scripts
 builder = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(builder)
 version = (ROOT / "VERSION").read_text().strip()
-assert version == "1.2.0"
+assert version == "1.3.0"
 with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
     archive = builder.build(Path(first))
     again = builder.build(Path(second))
     assert archive.read_bytes() == again.read_bytes(), "Package builds must be reproducible"
-    assert archive.name == "subsidy-manager-v1.2.0.zip"
+    assert archive.name == "subsidy-manager-v1.3.0.zip"
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     assert archive.with_suffix(".zip.sha256").read_text().split()[0] == digest
     with zipfile.ZipFile(archive) as package:
@@ -29,9 +29,13 @@ with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as se
         assert not any(re.search(r"tests/|AGENTS|README|tlconfig|all_def|\.svg$|__pycache__|\.git", name) for name in names)
         manifest = json.loads(package.read(prefix + "mod.json"))
         assert manifest["modId"] == "tf3_subsidy_manager"
-        assert type(manifest["revision"]) is int and manifest["revision"] == 17, "Auto-decline update increments revision 16 once"
+        assert type(manifest["revision"]) is int and manifest["revision"] == 18, "Recovery update increments revision 17 once"
         assert manifest == json.loads((builder.MOD / "mod.json").read_text())
         assert "version" not in manifest and "platforms" not in manifest
+        assert manifest["cosmetic"] is False, "Recovery changes simulation behaviour"
+        assert manifest["runScript"]["fileName"] == "tf3_subsidy_manager::/plugins/subsidy_manager/setup.script@runFn"
+        for file in ("setup.script.lua", "recovery.script.lua"):
+            assert prefix + "content/plugins/subsidy_manager/" + file in names
         info = json.loads(package.read(prefix + "_metadata/modinfo.json"))
         assert info["name"] == "Subsidy Manager" and len(info["name"]) <= 32
         assert len(info["summary"]) <= 100 and "\n" not in info["summary"]
@@ -54,6 +58,11 @@ with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as se
         script = package.read(prefix + "content/plugins/subsidy_manager/main.script.tl").decode()
         for key in re.findall(r'_\("(tf3_subsidy_manager_[a-z_]+)"\)', script):
             assert key in strings, key
+        for reason in ("unsupported", "timeout", "duplicate", "missing_resource", "invalid_destination", "already_complete", "not_found"):
+            assert "tf3_subsidy_manager_recovery_reason_" + reason in strings
+        assert strings["tf3_subsidy_manager_hidden_available"] == "%d previously hidden subsidies are still available."
+        assert "Declined offers cannot be restored" not in info["description"]
+        assert "v1.3.0" in info["description"] and "v1.2.0" in info["description"]
         for suffix in ("active", "offered", "history"):
             assert "tf3_subsidy_manager_" + suffix in strings
         for suffix in ("type", "resource", "destination", "requirement", "reward", "time", "progress", "deadline", "status", "reward_consequence"):

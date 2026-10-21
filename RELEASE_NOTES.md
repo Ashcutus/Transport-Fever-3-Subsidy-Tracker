@@ -1,5 +1,14 @@
 # Release Notes
 
+## v1.3.0 — Recover previously hidden subsidies
+
+- Auto-decline quietly saves new offers before declining them. Previously hidden offers do not set the manager’s toolbar dot.
+- When you switch Auto-decline off, the manager checks saved offers and tells you how many previously hidden subsidies are still available. Choose **Review offers** to see them.
+- **Show declined** in Offered includes saved automatic and manual declines. Choose **Recover** to restore the original contract, then use the game’s normal Accept or Decline controls.
+- Saved contracts keep their requirements, rewards and remaining offer time. Their offer timer pauses while saved; accepted-task deadlines are unchanged.
+- Contracts that cannot be recovered appear in History as **Expired — could not recover**, with an explanation and no failure penalty. Temporary read errors keep the saved offer available for another attempt.
+- Recovery supports the four vanilla subsidy types and offers saved from this version onward. Older declines cannot be recovered.
+
 ## v1.2.0 — Auto-decline new offers
 
 - Added an optional Auto-decline toggle beside Refresh, off by default, with a short explanatory tooltip.

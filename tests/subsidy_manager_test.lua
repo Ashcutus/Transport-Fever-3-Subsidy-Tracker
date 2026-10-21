@@ -34,6 +34,7 @@ function react.RegisterRecipe(_, fn)
     end
 end
 function react.CallOriginalRecipe(fn, params) return fn(params) end
+function react.onEvent(_) end -- Recovery events are exercised by recovery integration tests.
 function react.onMount(_) end -- Mount acknowledgement is exercised by offer_badge_test.lua.
 function react.fireEvent(_, name, params) events[#events + 1] = {name = name, params = params} end
 function react.RegisterWrapperRecipe(name, wrapped, fn)

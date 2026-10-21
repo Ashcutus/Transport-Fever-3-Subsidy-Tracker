@@ -12,6 +12,49 @@ local SUBVENTION_SCRIPT = "::/game_mechanics/subventions/subventions.gs"
 local MOD_ID = "tf3_subsidy_manager"
 local AUTO_DECLINE_EVENT = "tf3SubsidyManagerAutoDecline"
 local OFFERS_OPENED_EVENT = "tf3SubsidyManagerOffersOpened"
+local ARCHIVE_REQUEST_EVENT = "tf3SubsidyManagerArchiveRequest"
+local ARCHIVE_REPLY_EVENT = "tf3SubsidyManagerArchiveReply"
+local ARCHIVE_RECOVER_EVENT = "tf3SubsidyManagerArchiveRecover"
+local pendingArchiveRequest : {any : any} = nil
+
+local function sendArchiveRequest(action : string, key : string, sequence : number)
+	if pendingArchiveRequest then return end
+	pendingArchiveRequest = { action = action, key = key, sequence = sequence, attempts = 0 }
+	local ok = pcall(function()
+		api.cmd.sendCommand(api.cmd.makeScriptingSendEventCmd(MOD_ID, "tf3SubsidyManager", "tf3SubsidyManager", { action = action, key = key }))
+	end)
+	if not ok then
+		pendingArchiveRequest = nil
+		react.fireEvent(nil, ARCHIVE_REPLY_EVENT, { action = action, key = key, success = false, reason = "unavailable", sequence = sequence })
+	end
+end
+
+local function checkArchiveReply()
+	if not pendingArchiveRequest then return end
+	pendingArchiveRequest.attempts = (pendingArchiveRequest.attempts as number) + 1
+	local ok, value = pcall(function() : any
+		local entity = api.engine.system.gameScriptSystem.getEntityForGameScript(SUBVENTION_SCRIPT)
+		if not entity or not api.engine.entityExists(entity) then return nil end
+		local component = api.engine.getComponent(entity, api.type.ComponentType.GAME_SCRIPT) as Engine.Component.GameScript<SubventionState>
+		local state = component and component.state as {any : any}
+		local archive = state and state.tf3SubsidyManagerArchive as {any : any}
+		return archive and archive.response
+	end)
+	local response : {any : any} = {}
+	if ok and type(value) == "table" then
+		for key, child in pairs(value as {any : any}) do
+			if type(child) == "string" or type(child) == "number" or type(child) == "boolean" then response[key] = child end
+		end
+	end
+	local matches = type(response.sequence) == "number" and (response.sequence as number) < math.huge and (response.sequence as number) > (pendingArchiveRequest.sequence as number) and response.action == pendingArchiveRequest.action
+	if response.action == "recover" and response.key ~= pendingArchiveRequest.key then matches = false end
+	if not matches then
+		if (pendingArchiveRequest.attempts as number) < 4 then return end
+		response = { action = pendingArchiveRequest.action, key = pendingArchiveRequest.key, sequence = pendingArchiveRequest.sequence, success = false, reason = "unavailable" }
+	end
+	pendingArchiveRequest = nil
+	react.fireEvent(nil, ARCHIVE_REPLY_EVENT, response)
+end
 
 local record OfferBadgeState
 	initialized : boolean
@@ -112,6 +155,9 @@ local OfferBadgeIcon = react.RegisterWrapperRecipe("TF3SubsidyManagerOfferBadgeI
 	local tracked : ReactRefT<OfferBadgeState> = react.useRefLazy(loadOfferBadge)
 	local automatic : ReactRefT<AutoDeclineState> = react.useRefLazy(loadAutoDecline)
 	local pending : ReactStateT<boolean> = engineReactUtil.useStepStateTimer(function() : boolean
+		-- Only explicit review/recovery commands read their small acknowledgement.
+		-- This never refreshes ordinary overview tables or formats cards on a timer.
+		checkArchiveReply()
 		local badge = tracked:get()
 		local uids : {string : integer} = {}
 		local ok, result = pcall(queryOfferIdentities, uids)
@@ -124,7 +170,7 @@ local OfferBadgeIcon = react.RegisterWrapperRecipe("TF3SubsidyManagerOfferBadgeI
 			if setting.enabled and setting.initialized and not setting.offers[key] then
 				-- Match the vanilla Decline action; never mutate GAME_SCRIPT tables.
 				handled = pcall(function()
-					api.cmd.sendCommand(api.cmd.makeScriptingSendEventCmd("", "Subvention", "onDecline", { uid = uids[key] }))
+					api.cmd.sendCommand(api.cmd.makeScriptingSendEventCmd(MOD_ID .. ":auto", "Subvention", "onDecline", { uid = uids[key] }))
 				end)
 			end
 			if handled then seen[key] = true end
@@ -138,7 +184,7 @@ local OfferBadgeIcon = react.RegisterWrapperRecipe("TF3SubsidyManagerOfferBadgeI
 		local changed = not badge.initialized
 		for key, _value in pairs(offers) do
 			if not badge.offers[key] then
-				if badge.initialized then badge.pending = true end
+				if badge.initialized and not setting.enabled then badge.pending = true end
 				changed = true
 			end
 		end
@@ -147,6 +193,11 @@ local OfferBadgeIcon = react.RegisterWrapperRecipe("TF3SubsidyManagerOfferBadgeI
 		if changed or badge.dirty then badge.dirty = not saveOfferBadge(badge) end
 		return badge.pending
 	end, 5)
+	react.onEvent(ARCHIVE_REQUEST_EVENT, function(_name : string, value : any)
+		if type(value) ~= "table" then return end
+		local request = value as {any : any}
+		sendArchiveRequest(request.action as string, request.key as string, request.sequence as number)
+	end)
 	react.onEvent(AUTO_DECLINE_EVENT, function(_name : string, value : any)
 		if type(value) ~= "boolean" then return end
 		local setting = automatic:get()
@@ -196,6 +247,8 @@ local record Entry
 	card : SubventionCardData
 	resourceName : string
 	outcome : string
+	archiveKey : string
+	reason : string
 end
 
 local record Snapshot
@@ -206,6 +259,9 @@ local record Snapshot
 	active : {Entry}
 	completed : {Entry}
 	failed : {Entry}
+	declined : {Entry}
+	expired : {Entry}
+	archiveResponse : {any : any}
 end
 
 local function emptySnapshot() : Snapshot
@@ -217,6 +273,9 @@ local function emptySnapshot() : Snapshot
 		active = {},
 		completed = {},
 		failed = {},
+		declined = {},
+		expired = {},
+		archiveResponse = { sequence = 0 },
 	}
 end
 
@@ -339,6 +398,20 @@ local function querySnapshot() : Snapshot
 	snapshot.active = copyEntries(state.activeSubventions)
 	snapshot.completed = copyEntries(state.completedSubventions or {}, false, "successful")
 	snapshot.failed = copyEntries(state.failedSubventions or {}, false, "failed")
+	local archive = (state as {any : any}).tf3SubsidyManagerArchive as {any : any}
+	if type(archive) == "table" and archive.version == 1 and type(archive.entries) == "table" then
+		if type(archive.response) == "table" then snapshot.archiveResponse = copyTable(archive.response) as {any : any} end
+		for _index, value in ipairs(archive.entries as {{any : any}}) do
+			if type(value) == "table" and type(value.record) == "table" and type(value.key) == "string" then
+				local entries = copyEntries({value.record as ISubvention}, false, value.status == "expired" and "expired" or value.source == "automatic" and "hidden" or "declined")
+				local entry = entries[1]
+				entry.archiveKey = value.key as string
+				entry.reason = type(value.reason) == "string" and value.reason as string or "unsupported"
+				if value.status == "expired" then snapshot.expired[#snapshot.expired + 1] = entry
+				elseif value.status == "saved" then snapshot.declined[#snapshot.declined + 1] = entry end
+			end
+		end
+	end
 	return snapshot
 end
 
@@ -358,6 +431,7 @@ local function readSnapshot() : Snapshot
 end
 
 local function canOpenDetail(item : Entry) : boolean
+	if item and item.archiveKey then return false end
 	if not item or not item.card or not item.recordCopy then return false end
 	local uid = item.recordCopy.uid
 	return type(uid) == "number" and uid >= 0 and uid < math.huge and uid == math.floor(uid)
@@ -388,7 +462,16 @@ end
 local function columnText(item : Entry, key : string) : string
 	local card = item.card
 	if key == "type" then return item.name end
-	if key == "status" then return _(item.outcome == "failed" and "tf3_subsidy_manager_failed" or "tf3_subsidy_manager_completed") end
+	if key == "status" then
+		if item.outcome == "" then return _("tf3_subsidy_manager_available") end
+		if item.outcome == "expired" then return _("tf3_subsidy_manager_expired") end
+		if item.outcome == "hidden" then return _("tf3_subsidy_manager_hidden") end
+		if item.outcome == "declined" then return _("tf3_subsidy_manager_declined") end
+		return _(item.outcome == "failed" and "tf3_subsidy_manager_failed" or "tf3_subsidy_manager_completed")
+	end
+	if key == "action" then return item.archiveKey and _("tf3_subsidy_manager_recover") or _("tf3_subsidy_manager_details") end
+	if item.outcome == "expired" and key == "reward" then return _("tf3_subsidy_manager_recovery_reason_" .. (item.reason or "unsupported")) end
+	if item.archiveKey and key == "time" then return _("tf3_subsidy_manager_saved_timer") end
 	if key == "resource" then return item.resourceName and item.resourceName ~= "" and item.resourceName or "—" end
 	if key == "requirement" then
 		local required = card and card.cargoToDeliver or item.required
@@ -442,7 +525,7 @@ local function makeCell(key : string) : Recipe<Builtin.TableCellParam>
 			for _index, path in ipairs(item.card.cargoIcons or {}) do
 				parts[#parts + 1] = builtin.ImageView { path = path, scaling = builtin.type.ImageViewScaling.AutoFit }
 			end
-		elseif item and key == "status" then
+		elseif item and key == "status" and (item.outcome == "failed" or item.outcome == "successful") then
 			parts[#parts + 1] = builtin.ImageView {
 				path = item.outcome == "failed" and "::/game_mechanics/subventions/icons/mark_failed.tga" or "::/game_mechanics/subventions/icons/mark_complete.tga",
 				scaling = builtin.type.ImageViewScaling.AutoFit,
@@ -456,16 +539,20 @@ local function makeCell(key : string) : Recipe<Builtin.TableCellParam>
 		end
 		return builtin.BoxLayout {
 			children = { builtin.Button {
-				meta = { class = key == "reward" and "tf3-subsidy-cell, tf3-subsidy-reward-cell" or key == "time" and "tf3-subsidy-cell, tf3-subsidy-time-cell" or "tf3-subsidy-cell", tooltip = tooltip, enabled = canOpenDetail(item) },
+				meta = { class = key == "reward" and "tf3-subsidy-cell, tf3-subsidy-reward-cell" or key == "time" and "tf3-subsidy-cell, tf3-subsidy-time-cell" or "tf3-subsidy-cell", tooltip = tooltip, enabled = canOpenDetail(item) or (key == "action" and item ~= nil and item.archiveKey ~= nil and item.outcome ~= "expired" and not pendingArchiveRequest) },
 				content = builtin.Component { layout = builtin.BoxLayout { orientation = builtin.type.Orientation.Horizontal, children = parts } },
-				onClick = function() if item then openDetail(item) end end,
+				onClick = function()
+					if item and item.archiveKey and key == "action" and item.outcome ~= "expired" then
+						react.fireEvent(nil, ARCHIVE_RECOVER_EVENT, item.archiveKey)
+					elseif item then openDetail(item) end
+				end,
 			} },
 		}
 	end)
 end
 
 local cellRecipes : {string : Recipe<Builtin.TableCellParam>} = {}
-for _index, key in ipairs({"type", "resource", "destination", "requirement", "progress", "reward", "time", "status"}) do cellRecipes[key] = makeCell(key) end
+for _index, key in ipairs({"type", "resource", "destination", "requirement", "progress", "reward", "time", "status", "action"}) do cellRecipes[key] = makeCell(key) end
 
 local function renderEmpty(section : integer) : TreeNodeId
 	local title = section == 1 and _("tf3_subsidy_manager_no_active") or section == 2 and _("tf3_subsidy_manager_no_offers") or _("tf3_subsidy_manager_no_history")
@@ -489,10 +576,13 @@ local function renderEmpty(section : integer) : TreeNodeId
 	}
 end
 
-local function renderTable(items : {Entry}, section : integer, generation : integer) : TreeNodeId
+local function renderTable(items : {Entry}, section : integer, generation : integer, declined? : boolean) : TreeNodeId
 	if #items == 0 then return renderEmpty(section) end
 	local keys = section == 3 and {"status", "type", "resource", "destination", "reward"} or
 		{"type", "resource", "destination", section == 1 and "progress" or "requirement", "reward", "time"}
+	if section == 2 and declined then
+		keys = {"status", "type", "destination", "requirement", "reward", "action"}
+	end
 	local columns : {TreeNodeId} = {}
 	for _index, key in ipairs(keys) do
 		local label = key == "reward" and section == 3 and "reward_consequence" or key == "time" and section == 1 and "deadline" or key
@@ -522,6 +612,22 @@ end
 local record WindowParams is ToolReactUtil.IToolWindowParam<ToolReactUtil.IToolParam>
 end
 
+local function acknowledgedArchiveSequence() : number
+	local ok, saved = pcall(function() : any return api.gui.game.getGuiSaveData(MOD_ID) end)
+	if ok and type(saved) == "table" and type((saved as table).archiveAcknowledged) == "number" then return (saved as table).archiveAcknowledged as number end
+	return 0
+end
+
+local function acknowledgeArchive(sequence : number)
+	pcall(function()
+		local saved = api.gui.game.getGuiSaveData(MOD_ID)
+		local data : {any : any} = {}
+		if type(saved) == "table" then for key, value in pairs(saved) do data[key] = value end end
+		data.archiveAcknowledged = sequence
+		api.gui.game.setGuiSaveData(MOD_ID, data)
+	end)
+end
+
 local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindow", builtin.Window, function(params : WindowParams) : TreeNodeId
 	local snapshot : ReactStateT<Snapshot> = react.useStateLazy(readSnapshot)
 	local selectedTab : ReactStateT<integer> = react.useState(1)
@@ -532,6 +638,35 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 		snapshot:set(readSnapshot())
 		generation:set(generation:old() + 1)
 	end
+	local showDeclined : ReactStateT<boolean> = react.useState(false)
+	local busy : ReactStateT<boolean> = react.useState(pendingArchiveRequest ~= nil)
+	local notice : ReactStateT<{any : any}> = react.useStateLazy(function() : {any : any}
+		local response = snapshot:old().archiveResponse
+		if not autoDecline:old() and type(response.sequence) == "number" and (response.sequence as number) > acknowledgedArchiveSequence() then return response end
+		return nil
+	end)
+	local function request(action : string, key : string, disabling? : boolean)
+		if busy:old() or pendingArchiveRequest or (autoDecline:old() and not disabling) then return end
+		busy:set(true)
+		react.fireEvent(nil, ARCHIVE_REQUEST_EVENT, { action = action, key = key, sequence = snapshot:old().archiveResponse.sequence or 0 })
+	end
+	react.onEvent(ARCHIVE_RECOVER_EVENT, function(_name : string, key : any)
+		if type(key) == "string" then request("recover", key as string) end
+	end)
+	react.onEvent(ARCHIVE_REPLY_EVENT, function(_name : string, value : any)
+		if type(value) ~= "table" then return end
+		local reply = value as {any : any}
+		busy:set(false)
+		notice:set(reply)
+		local updated = readSnapshot()
+		if reply.action == "recover" and reply.success == true then
+			local uid : number = nil
+			for _index, entry in ipairs(snapshot:old().declined) do if entry.archiveKey == reply.key and entry.recordCopy then uid = entry.recordCopy.uid end end
+			for _index, entry in ipairs(updated.offered) do if entry.recordCopy and entry.recordCopy.uid == uid then openDetail(entry) end end
+		end
+		snapshot:set(updated)
+		generation:set(generation:old() + 1)
+	end)
 	local current = snapshot:old()
 	-- Acknowledge only after successful mounting, never merely on the toolbar click.
 	react.onMount(function()
@@ -547,49 +682,106 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 	local history : {Entry} = {}
 	for _index, item in ipairs(current.completed) do history[#history + 1] = item end
 	for _index, item in ipairs(current.failed) do history[#history + 1] = item end
+	for _index, item in ipairs(current.expired) do history[#history + 1] = item end
+	local offers : {Entry} = {}
+	for _index, item in ipairs(current.offered) do offers[#offers + 1] = item end
+	if showDeclined:old() and not autoDecline:old() then
+		for _index, item in ipairs(current.declined) do offers[#offers + 1] = item end
+	end
 	local content : TreeNodeId
 	if current.readError then content = builtin.TextView { text = _("tf3_subsidy_manager_read_error") }
 	elseif not current.stateFound then content = builtin.TextView { text = _("tf3_subsidy_manager_unavailable") }
 	elseif section == 1 then content = renderTable(current.active, section, generation:old())
-	elseif section == 2 then content = renderTable(current.offered, section, generation:old())
+	elseif section == 2 then content = renderTable(offers, section, generation:old(), showDeclined:old())
 	else content = renderTable(history, section, generation:old()) end
 	local buttons : {Builtin.ToggleButtonGroupChildParam} = {}
-	local counts = {#current.active, #current.offered, #history}
+	local counts = {#current.active, #offers, #history}
 	for index, label in ipairs({"active", "offered", "history"}) do
 		local count = current.stateFound and (" (" .. counts[index] .. ")") or ""
 		buttons[index] = { content = builtin.TextView { text = _("tf3_subsidy_manager_" .. label) .. count } }
 	end
-	local controls = builtin.BoxLayout {
-		meta = { class = "tf3-subsidy-controls" },
-		orientation = builtin.type.Orientation.Horizontal,
-		children = {
-			builtin.ToggleButtonGroup {
-				buttons = buttons,
-				selected = section,
-				deselectAllowed = false,
-				onValueChange = function(index : integer) if index >= 1 and index <= 3 then selectedTab:set(index) end end,
-			},
-			builtin.Button {
-				meta = { class = "secondary", tooltip = _("tf3_subsidy_manager_refresh_tooltip") },
-				content = builtin.TextView { text = _("tf3_subsidy_manager_refresh") },
-				onClick = refresh,
-			},
-			builtin.CheckBox {
-				meta = { tooltip = _("tf3_subsidy_manager_auto_decline_tooltip") },
-				label = _("tf3_subsidy_manager_auto_decline"),
-				value = autoDecline:old() and 1 or 0,
-				onValueChange = function(value : integer)
-					autoDecline:set(value == 1)
-					react.fireEvent(nil, AUTO_DECLINE_EVENT, value == 1)
-				end,
-			},
+	local controlChildren : {TreeNodeId} = {
+		builtin.ToggleButtonGroup {
+			buttons = buttons, selected = section, deselectAllowed = false,
+			onValueChange = function(index : integer) if index >= 1 and index <= 3 then selectedTab:set(index) end end,
+		},
+		builtin.Button {
+			meta = { class = "secondary", tooltip = _("tf3_subsidy_manager_refresh_tooltip") },
+			content = builtin.TextView { text = _("tf3_subsidy_manager_refresh") },
+			onClick = refresh,
+		},
+		builtin.CheckBox {
+			meta = { tooltip = _("tf3_subsidy_manager_auto_decline_tooltip"), enabled = not busy:old() and not pendingArchiveRequest },
+			label = _("tf3_subsidy_manager_auto_decline"), value = autoDecline:old() and 1 or 0,
+			onValueChange = function(value : integer)
+				if busy:old() or pendingArchiveRequest then return end
+				local wasEnabled = autoDecline:old()
+				autoDecline:set(value == 1)
+				showDeclined:set(false)
+				notice:set(nil)
+				react.fireEvent(nil, AUTO_DECLINE_EVENT, value == 1)
+				if wasEnabled and value ~= 1 then request("review", nil, true) end
+			end,
 		},
 	}
-
-	-- Choose once per snapshot, not per selected tab; keep populated revision 9 sizing.
-	local hasRecords = #current.active + #current.offered + #history > 0
+	if section == 2 and not autoDecline:old() and #current.declined > 0 then
+		controlChildren[#controlChildren + 1] = builtin.CheckBox {
+			label = _("tf3_subsidy_manager_show_declined"), value = showDeclined:old() and 1 or 0,
+			onValueChange = function(value : integer)
+				showDeclined:set(value == 1)
+				generation:set(generation:old() + 1)
+			end,
+		}
+	end
+	local message = notice:old()
+	local showNotice = not autoDecline:old() and ((busy:old() and pendingArchiveRequest ~= nil and pendingArchiveRequest.action == "recover") or (not busy:old() and message ~= nil and (message.reason == "unavailable" or message.action == "recover" or (message.action == "review" and type(message.count) == "number" and (message.count as number) > 0))))
+	local controls = builtin.BoxLayout {
+		meta = { class = "tf3-subsidy-controls" }, orientation = builtin.type.Orientation.Horizontal,
+		children = controlChildren,
+	}
+	local children : {TreeNodeId} = { controls }
+	if showNotice then
+		local text = _("tf3_subsidy_manager_checking_saved")
+		if not busy:old() and message then
+			if message.reason == "unavailable" then text = _("tf3_subsidy_manager_recovery_unavailable")
+			elseif message.action == "review" then
+				text = string.format(_(message.count == 1 and "tf3_subsidy_manager_hidden_available_one" or "tf3_subsidy_manager_hidden_available"), message.count)
+			elseif message.success == true then text = _("tf3_subsidy_manager_recovered")
+			else text = _("tf3_subsidy_manager_recovery_expired") end
+		end
+		local feedback : {TreeNodeId} = { builtin.TextView { text = text } }
+		if not busy:old() then
+			if message and message.reason == "unavailable" then feedback[#feedback + 1] = builtin.Button {
+				content = builtin.TextView { text = _("tf3_subsidy_manager_retry") },
+				onClick = function() request(message.action as string, message.key as string) end,
+			} end
+			if message and message.action == "review" and message.reason ~= "unavailable" then feedback[#feedback + 1] = builtin.Button {
+				content = builtin.TextView { text = _("tf3_subsidy_manager_review_offers") },
+				onClick = function()
+					selectedTab:set(2); showDeclined:set(true)
+					generation:set(generation:old() + 1)
+					acknowledgeArchive(message.sequence as number); notice:set(nil)
+				end,
+			} end
+			feedback[#feedback + 1] = builtin.Button {
+				content = builtin.TextView { text = _("tf3_subsidy_manager_dismiss") },
+				onClick = function() if message then acknowledgeArchive(message.sequence as number) end; notice:set(nil) end,
+			}
+		end
+		children[#children + 1] = builtin.BoxLayout { meta = { class = "tf3-subsidy-feedback" }, orientation = builtin.type.Orientation.Horizontal, children = feedback }
+	end
+	children[#children + 1] = builtin.ScrollArea {
+		meta = { class = "tf3-subsidy-data-region" },
+		horizontalPolicy = builtin.type.ScrollBarPolicy.AlwaysOff,
+		verticalPolicy = builtin.type.ScrollBarPolicy.AlwaysOff,
+		content = builtin.Component {
+			layout = builtin.BoxLayout { orientation = builtin.type.Orientation.Vertical, children = { content } },
+		},
+	}
+	-- Archive rows also require the populated preset; tabs do not resize it.
+	local hasRecords = #current.active + #current.offered + #history + (autoDecline:old() and 0 or #current.declined) > 0
 	return builtin.Window {
-		meta = { class = hasRecords and "tf3-subsidy-populated" or "tf3-subsidy-empty" },
+		meta = { class = (hasRecords and "tf3-subsidy-populated" or "tf3-subsidy-empty") .. (showNotice and ", tf3-subsidy-feedback-visible" or "") },
 		id = WINDOW_ID,
 		tool = "TF3SubsidyManager",
 		title = _("tf3_subsidy_manager_title"),
@@ -604,19 +796,7 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 		content = builtin.BoxLayout {
 			meta = { class = "tf3-subsidy-content" },
 			orientation = builtin.type.Orientation.Vertical,
-			children = { controls, builtin.ScrollArea {
-				meta = { class = "tf3-subsidy-data-region" },
-				horizontalPolicy = builtin.type.ScrollBarPolicy.AlwaysOff,
-				verticalPolicy = builtin.type.ScrollBarPolicy.AlwaysOff,
-				-- The native DataTable owns its scrolling/header; keep the component boundary.
-				-- ScrollArea requires a component, even when the selected tab is a layout.
-				content = builtin.Component {
-					layout = builtin.BoxLayout {
-						orientation = builtin.type.Orientation.Vertical,
-						children = { content },
-					},
-				},
-			} },
+			children = children,
 		},
 	}
 end)

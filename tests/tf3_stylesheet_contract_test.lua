@@ -165,7 +165,7 @@ for _, rule in ipairs(list) do
     local levels, style = rule.levels, rule.styleSheet
     if #levels >= 2 and levelMatches(levels[1], nil, nil, "tf3-subsidy-manager.window") then
         if levelMatches(levels[2], nil, "tf3-subsidy-empty-state") then
-            if #levels == 2 then
+            if #levels == 2 and not levelMatches(levels[1], nil, "tf3-subsidy-feedback-visible") then
                 if levelMatches(levels[1], nil, "tf3-subsidy-empty") then compactPanel = style
                 else emptyPanel = style end
             end

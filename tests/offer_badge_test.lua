@@ -21,7 +21,7 @@ end
 local function offer(uid, id, time)
     return {id = id or "native-offer.res", uid = uid, spawnTime = time or 100, data = {}}
 end
-local commands, commandFailure = {}, false
+local commands, archiveCommands, commandFailure = {}, {}, false
 local saved, component, writes, cardReads, engineReads = nil, nil, 0, 0, 0
 local getFailure, setFailure, engineFailure, unavailable = false, false, false, false
 local function world(offers)
@@ -76,6 +76,8 @@ local function boot()
     function react.fireEvent(_, name, data)
         local listener = badgeContext.events[name]
         if listener then listener(name, data) end
+        local windowListener = windowContext.events[name]
+        if windowListener then windowListener(name, data) end
     end
     local engineReact = {useStepStateTimer = function(fn, interval)
         local state = react.useStateLazy(fn)
@@ -92,12 +94,15 @@ local function boot()
     end
     local api = {cmd = {
         makeScriptingSendEventCmd = function(namespace, target, event, data)
-            assert(namespace == "" and target == "Subvention" and event == "onDecline")
-            return copy(data)
+            assert((namespace == "tf3_subsidy_manager:auto" and target == "Subvention" and event == "onDecline")
+                or (namespace == "tf3_subsidy_manager" and target == "tf3SubsidyManager" and event == target))
+            return {uid = data.uid, action = data.action, key = data.key}
         end,
         sendCommand = function(command)
             if commandFailure then error("command unavailable") end
-            commands[#commands + 1] = command
+            if command.action then
+                archiveCommands[#archiveCommands + 1] = command
+            else commands[#commands + 1] = command end
         end,
     }, type = {ComponentType = {GAME_SCRIPT = 1}}, engine = {
         system = {gameScriptSystem = {getEntityForGameScript = function(path)
@@ -271,6 +276,10 @@ local function toggle(value)
     assert(checkbox.meta.tooltip == "tf3_subsidy_manager_auto_decline_tooltip")
     checkbox.onValueChange(value and 1 or 0)
     loadEnabled = value
+    if not value and #archiveCommands > 0 then
+        component.state.tf3SubsidyManagerArchive = {version = 1, entries = {}, response = {sequence = #archiveCommands, action = "review", count = 0}}
+        poll()
+    end
 end
 reset({offer(1)}, {unrelated = {keep = true}}); commands = {}; loadEnabled = false
 assert(not badge()); poll(); assert(#commands == 0)
@@ -303,3 +312,104 @@ for _, malformed in ipairs({false, {version = 0}, {version = 1, enabled = "yes",
     toggle(false)
 end
 print("PASS: auto-decline default off, future-only commands, validation, no duplicate dispatch, independent acknowledgement, reload, disable/re-enable, command/save/query failures")
+
+-- Quiet suppression and the explicit review/recovery acknowledgement path.
+local function findNode(node, predicate)
+    if type(node) ~= 'table' then return nil end
+    if predicate(node) then return node end
+    for _, key in ipairs({'children', 'layout', 'content'}) do
+        local child = node[key]
+        if type(child) == 'table' then
+            if child.kind then
+                local found = findNode(child, predicate); if found then return found end
+            else
+                for _, item in ipairs(child) do local found = findNode(item, predicate); if found then return found end end
+            end
+        end
+    end
+end
+local function feedback(tree)
+    return findNode(tree, function(n) return n.meta and n.meta.class == 'tf3-subsidy-feedback' end)
+end
+local function button(tree, text)
+    return assert(findNode(tree, function(n) return n.kind == 'Button' and n.content and n.content.text == text end), text)
+end
+local function tableNode(tree) return assert(findNode(tree, function(n) return n.kind == 'DataTable' end)) end
+reset({}, {unrelated = 'keep'}); commands, archiveCommands, loadEnabled = {}, {}, false
+assert(not badge()); toggle(true)
+component.state.proposedSubventions = {offer(101)}
+assert(not poll() and not saved.offerBadge.pending, 'Suppressed offers must not set the toolbar dot')
+assert(#commands == 1 and #archiveCommands == 0 and not feedback(render(windowRecipe, windowContext)))
+local hidden1, hidden2, manual, expired = offer(101), offer(102), offer(103), offer(104)
+for _, r in ipairs({hidden1, hidden2, manual, expired}) do r.data.name = 'Saved contract' end
+component.state.proposedSubventions = {}
+component.state.tf3SubsidyManagerArchive = {version = 1, entries = {
+    {key = '1', record = hidden1, source = 'automatic', status = 'saved'},
+    {key = '2', record = hidden2, source = 'automatic', status = 'saved'},
+    {key = '3', record = manual, source = 'manual', status = 'saved'},
+    {key = '4', record = expired, source = 'automatic', status = 'expired', reason = 'invalid_destination'},
+}, response = {sequence = 0}}
+local tree = render(windowRecipe, windowContext)
+assert(not feedback(tree), 'No recovery notice while suppression remains on')
+tree.content.children[1].children[3].onValueChange(0); loadEnabled = false
+assert(#archiveCommands == 1 and archiveCommands[1].action == 'review', 'Disabling must request a simulation check')
+assert(not feedback(render(windowRecipe, windowContext)), 'Do not announce saved offers before the availability check completes')
+component.state.tf3SubsidyManagerArchive.response = {sequence = 1, action = 'review', count = 2, success = true}
+poll(); tree = render(windowRecipe, windowContext)
+assert(feedback(tree).children[1].text == 'tf3_subsidy_manager_hidden_available')
+assert(#component.state.proposedSubventions == 0, 'Review must not recreate any offer')
+button(tree, 'tf3_subsidy_manager_review_offers').onClick()
+tree = render(windowRecipe, windowContext)
+assert(not feedback(tree) and saved.archiveAcknowledged == 1 and saved.unrelated == 'keep')
+local tableView = tableNode(tree)
+assert(#tableView.rowKeys == 3 and #tableView.columns == 6)
+assert(tableView.columns[1].name == 'tf3_subsidy_manager_column_status')
+local actionColumn = tableView.columns[6]
+assert(actionColumn.name == 'tf3_subsidy_manager_column_action')
+local action = actionColumn.recipe({userParam = tableView.userParam, rowKey = 1})
+assert(action.children[1].meta.enabled and action.children[1].content.layout.children[1].text == 'tf3_subsidy_manager_recover')
+action.children[1].onClick()
+assert(#archiveCommands == 2 and archiveCommands[2].action == 'recover' and archiveCommands[2].key == '1')
+-- The snapshot stays unchanged until the simulation confirms recovery.
+assert(#tableNode(render(windowRecipe, windowContext)).rowKeys == 3)
+component.state.proposedSubventions = {copy(hidden1)}
+table.remove(component.state.tf3SubsidyManagerArchive.entries, 1)
+component.state.tf3SubsidyManagerArchive.response = {sequence = 2, action = 'recover', key = '1', success = true}
+poll(); tree = render(windowRecipe, windowContext)
+assert(feedback(tree).children[1].text == 'tf3_subsidy_manager_recovered')
+local previousKey = tableView.meta.localKey
+tableView = tableNode(tree)
+assert(tableView.meta.localKey ~= previousKey and #tableView.rowKeys == 3, 'Acknowledgement must rebuild cells')
+-- Recovery failure moves the archived row to History, preserving native failed tasks.
+action = tableView.columns[6].recipe({userParam = tableView.userParam, rowKey = 2})
+action.children[1].onClick()
+assert(archiveCommands[3].key == '2')
+component.state.tf3SubsidyManagerArchive.entries[1].status = 'expired'
+component.state.tf3SubsidyManagerArchive.entries[1].reason = 'invalid_destination'
+component.state.tf3SubsidyManagerArchive.response = {sequence = 3, action = 'recover', key = '2', success = false, reason = 'invalid_destination'}
+poll(); tree = render(windowRecipe, windowContext)
+assert(feedback(tree).children[1].text == 'tf3_subsidy_manager_recovery_expired')
+assert(#component.state.failedSubventions == 0)
+button(tree, 'tf3_subsidy_manager_dismiss').onClick()
+tree = render(windowRecipe, windowContext)
+tree.content.children[1].children[1].onValueChange(3)
+tableView = tableNode(render(windowRecipe, windowContext))
+assert(#tableView.rowKeys == 2)
+local status = tableView.columns[1].recipe({userParam = tableView.userParam, rowKey = 1})
+assert(not status.children[1].meta.enabled)
+assert(status.children[1].content.layout.children[1].text == 'tf3_subsidy_manager_expired')
+local reason = tableView.columns[5].recipe({userParam = tableView.userParam, rowKey = 1})
+assert(reason.children[1].content.layout.children[1].text == 'tf3_subsidy_manager_recovery_reason_invalid_destination')
+-- Dismissal persists, and ordinary incoming offers never repeat this notice.
+boot(); badge(); assert(not feedback(render(windowRecipe, windowContext)))
+component.state.proposedSubventions[#component.state.proposedSubventions + 1] = offer(105)
+assert(poll() and not feedback(render(windowRecipe, windowContext)))
+-- A missing adapter/late or failed response has bounded pending UI, not false expiry.
+toggle(true)
+tree = render(windowRecipe, windowContext)
+tree.content.children[1].children[3].onValueChange(0); loadEnabled = false
+for _ = 1, 4 do poll() end
+tree = render(windowRecipe, windowContext)
+assert(feedback(tree).children[1].text == 'tf3_subsidy_manager_recovery_unavailable')
+assert(component.state.tf3SubsidyManagerArchive.entries[2].status == 'saved')
+print('PASS: quiet suppression/no dot, review only when resuming flow, async confirmation, Show declined/status/recover, refreshed cells, expired History/reasons, persisted dismissal and bounded transient-error feedback')

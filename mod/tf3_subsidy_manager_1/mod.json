@@ -1,10 +1,13 @@
 {
     "modId": "tf3_subsidy_manager",
-    "revision": 17,
+    "revision": 18,
     "severityAdd": "None",
     "severityRemove": "None",
-    "cosmetic": true,
+    "cosmetic": false,
     "visible": true,
     "dependencies": null,
-    "incompatibilities": null
+    "incompatibilities": null,
+    "runScript": {
+        "fileName": "tf3_subsidy_manager::/plugins/subsidy_manager/setup.script@runFn"
+    }
 }

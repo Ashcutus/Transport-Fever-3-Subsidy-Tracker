@@ -15,6 +15,8 @@ RUNTIME_FILES = (
     "strings.json",
     "_metadata/modinfo.json",
     "content/plugins/subsidy_manager/main.script.tl",
+    "content/plugins/subsidy_manager/setup.script.lua",
+    "content/plugins/subsidy_manager/recovery.script.lua",
     "content/plugins/subsidy_manager/toolbar.res.lua",
     "content/plugins/subsidy_manager/toolbar.css.lua",
     "content/plugins/subsidy_manager/icons/contract_26@2x.tga",
