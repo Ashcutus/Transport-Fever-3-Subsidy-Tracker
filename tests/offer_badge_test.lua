@@ -124,6 +124,13 @@ local function boot()
                 if command.review then archiveCommands[#archiveCommands + 1] = command end
                 -- Model simulation acknowledgement, not a GUI write to gameplay.
                 local a = component.state.tf3SubsidyManagerArchive or {version = 1, entries = {}, response = {sequence = 0}}
+                if command.review or (command.enabled and a.automatic and a.automatic.enabled == false) then
+                    for _, entry in ipairs(a.entries) do
+                        if entry.status == 'saved' and entry.source == 'automatic' then entry.revealed = true end
+                    end
+                end
+                a.automatic = a.automatic or {}
+                a.automatic.enabled = command.enabled
                 a.response = {sequence = a.response.sequence + 1, action = 'configure', enabled = command.enabled, review = command.review, success = true, count = 0, requestId = command.requestId}
                 component.state.tf3SubsidyManagerArchive = a
             elseif command.action then archiveCommands[#archiveCommands + 1] = command
@@ -580,4 +587,67 @@ component.state.tf3SubsidyManagerArchive = {version = 1, entries = {}, response 
     sequence = 200, action = 'recover', key = 'old', success = true,
 }}
 assert(not feedback(render(windowRecipe, windowContext)))
+
+-- Previously revealed offers are ordinary existing offers across mode changes,
+-- Refresh and reload; future suppressed entries must stay out of this list.
+reset({offer(300)}, {autoDecline = {version = 1, enabled = false, offers = {}}})
+local firstVisible = offer(301)
+firstVisible.data.expireDurationProposed = 100
+component.state.tf3SubsidyManagerArchive = {version = 1, entries = {
+    {key = 'visible', record = firstVisible, remaining = 50, source = 'automatic', status = 'saved'},
+}, automatic = {enabled = false}, response = {sequence = 0}}
+loadEnabled = false
+badge(); poll(); tree = render(windowRecipe, windowContext)
+tree.content.children[1].children[1].onValueChange(2)
+tree = render(windowRecipe, windowContext)
+assert(#tableNode(tree).rowKeys == 2)
+tree.content.children[1].children[3].onValueChange(1); loadEnabled = true
+assert(#tableNode(render(windowRecipe, windowContext)).rowKeys == 2, 'Enabling must not remove already displayed legacy offers even during confirmation')
+poll()
+component.state.tf3SubsidyManagerArchive.entries[#component.state.tf3SubsidyManagerArchive.entries + 1] = {
+    key = 'future', record = offer(302), remaining = 50, source = 'automatic', status = 'saved',
+}
+tree = render(windowRecipe, windowContext)
+tree.content.children[1].children[2].onClick()
+tree = render(windowRecipe, windowContext)
+assert(#tableNode(tree).rowKeys == 2 and not offeredDot(tree), 'Refresh must preserve revealed rows without leaking future suppressed offers')
+assert(tableNode(tree).userParam.entries[2].recordCopy.uid == 301)
+boot(); badge(); poll(); tree = render(windowRecipe, windowContext)
+tree.content.children[1].children[1].onValueChange(2)
+tree = render(windowRecipe, windowContext)
+assert(#tableNode(tree).rowKeys == 2 and not offeredDot(tree), 'Revealed visibility must survive reload with Auto-decline enabled')
+local openBefore, requestBefore = #detailEvents, #archiveCommands
+tableNode(tree).columns[1].recipe({userParam = tableNode(tree).userParam, rowKey = 2}).children[1].onClick()
+assert(#archiveCommands == requestBefore + 1 and archiveCommands[#archiveCommands].key == 'visible')
+assert(feedback(render(windowRecipe, windowContext)).children[1].text == 'tf3_subsidy_manager_checking_saved')
+component.state.proposedSubventions[#component.state.proposedSubventions + 1] = copy(firstVisible)
+component.state.proposedSubventions[2].spawnTime = 950
+table.remove(component.state.tf3SubsidyManagerArchive.entries, 1)
+local replySequence = component.state.tf3SubsidyManagerArchive.response.sequence + 1
+component.state.tf3SubsidyManagerArchive.response = {
+    sequence = replySequence, action = 'recover', key = 'visible', success = true,
+    requestId = archiveCommands[#archiveCommands].requestId,
+}
+poll(); tree = render(windowRecipe, windowContext)
+assert(#detailEvents == openBefore + 1 and detailEvents[#detailEvents].nonEntity == 'subsidy_301')
+assert(#tableNode(tree).rowKeys == 2 and not feedback(tree))
+
+-- A revealed archive-only snapshot must keep the populated window preset on.
+component.state.proposedSubventions = {}
+component.state.tf3SubsidyManagerArchive.entries[1].revealed = true
+boot(); badge(); poll(); tree = render(windowRecipe, windowContext)
+assert(tree.meta.class == 'tf3-subsidy-populated')
+tree.content.children[1].children[1].onValueChange(2)
+tree = render(windowRecipe, windowContext)
+tableNode(tree).columns[1].recipe({userParam = tableNode(tree).userParam, rowKey = 1}).children[1].onClick()
+component.state.tf3SubsidyManagerArchive.entries[1].status = 'expired'
+component.state.tf3SubsidyManagerArchive.entries[1].reason = 'invalid_destination'
+component.state.tf3SubsidyManagerArchive.response = {
+    sequence = component.state.tf3SubsidyManagerArchive.response.sequence + 1,
+    action = 'recover', key = 'future', success = false, reason = 'invalid_destination',
+    requestId = archiveCommands[#archiveCommands].requestId,
+}
+poll(); tree = render(windowRecipe, windowContext)
+assert(feedback(tree).children[1].text == 'tf3_subsidy_manager_recovery_expired', 'A revealed offer failure must stay understandable with suppression enabled')
+print('PASS: revealed offers persist through enable/Refresh/reload and open normally with suppression enabled; future offers stay hidden and window sizing remains populated')
 print('PASS: stale acknowledgement rejection, authoritative saved simulation mode and expired-toolbar join cancellation')

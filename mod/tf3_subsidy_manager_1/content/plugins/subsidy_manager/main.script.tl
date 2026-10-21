@@ -262,6 +262,7 @@ local record Entry
 	resourceName : string
 	outcome : string
 	archiveKey : string
+	revealed : boolean
 	reason : string
 end
 
@@ -427,6 +428,7 @@ local function querySnapshot() : Snapshot
 				local entries = copyEntries({value.record as ISubvention}, value.status == "saved", value.status == "expired" and "expired" or value.source == "automatic" and "hidden" or "declined", value.remaining as number)
 				local entry = entries[1]
 				entry.archiveKey = value.key as string
+				entry.revealed = value.revealed == true
 				entry.reason = type(value.reason) == "string" and value.reason as string or "unsupported"
 				if value.status == "expired" then snapshot.expired[#snapshot.expired + 1] = entry
 				elseif value.status == "saved" then snapshot.declined[#snapshot.declined + 1] = entry end
@@ -675,7 +677,16 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 		generation:set(generation:old() + 1)
 	end
 	local function request(action : string, key : string, disabling? : boolean, enabled? : boolean, review? : boolean)
-		if busy:old() or pendingArchiveRequest or (autoDecline:old() and not disabling) then return end
+		if busy:old() or pendingArchiveRequest then return end
+		if autoDecline:old() and not disabling then
+			local visibleOffer = false
+			if action == "recover" then
+				for _index, entry in ipairs(snapshot:old().declined) do
+					if entry.archiveKey == key and entry.revealed then visibleOffer = true end
+				end
+			end
+			if not visibleOffer then return end
+		end
 		busy:set(true)
 		react.fireEvent(nil, ARCHIVE_REQUEST_EVENT, { action = action, key = key, sequence = snapshot:old().archiveResponse.sequence or 0, enabled = enabled, review = review })
 	end
@@ -726,13 +737,13 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 	local offers : {Entry} = {}
 	local hiddenCount, manualCount = 0, 0
 	for _index, item in ipairs(current.offered) do offers[#offers + 1] = item end
-	if not autoDecline:old() then
-		for _index, item in ipairs(current.declined) do
-			if item.outcome == "hidden" then hiddenCount = hiddenCount + 1
-			else manualCount = manualCount + 1 end
-			if item.outcome == "hidden" or showDeclined:old() then
-				offers[#offers + 1] = item
-			end
+	for _index, item in ipairs(current.declined) do
+		if item.outcome == "hidden" and (item.revealed or not autoDecline:old()) then
+			hiddenCount = hiddenCount + 1
+			offers[#offers + 1] = item
+		elseif item.outcome ~= "hidden" and not autoDecline:old() then
+			manualCount = manualCount + 1
+			if showDeclined:old() then offers[#offers + 1] = item end
 		end
 	end
 	local content : TreeNodeId
@@ -786,6 +797,16 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 			label = _(autoDeclineWaiting and "tf3_subsidy_manager_auto_decline_waiting" or "tf3_subsidy_manager_auto_decline"), value = autoDecline:old() and 1 or 0,
 			onValueChange = function(value : integer)
 				if busy:old() or pendingArchiveRequest then return end
+				if value == 1 and not autoDecline:old() then
+					-- Preserve the rows already displayed during confirmation,
+					-- including older saves without per-offer visibility flags.
+					local updated = copyTable(snapshot:old()) as Snapshot
+					for _index, entry in ipairs(updated.declined) do
+						if entry.outcome == "hidden" then entry.revealed = true end
+					end
+					snapshot:set(updated)
+					generation:set(generation:old() + 1)
+				end
 				autoDecline:set(value == 1)
 				showDeclined:set(false)
 				notice:set(nil)
@@ -803,7 +824,7 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 			end,
 		}
 	end
-	local showNotice = (not autoDecline:old() or (message ~= nil and message.action == "configure" and message.reason == "unavailable")) and ((busy:old() and pendingArchiveRequest ~= nil and pendingArchiveRequest.action == "recover") or (not busy:old() and message ~= nil and (message.reason == "unavailable" or message.action == "recover")))
+	local showNotice = (busy:old() and pendingArchiveRequest ~= nil and pendingArchiveRequest.action == "recover") or (not busy:old() and message ~= nil and (message.action == "recover" or (message.reason == "unavailable" and (not autoDecline:old() or message.action == "configure"))))
 	local controls = builtin.BoxLayout {
 		meta = { class = "tf3-subsidy-controls" }, orientation = builtin.type.Orientation.Horizontal,
 		children = controlChildren,
@@ -838,7 +859,7 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 		},
 	}
 	-- Archive rows also require the populated preset; tabs do not resize it.
-	local hasRecords = #current.active + #current.offered + #history + (autoDecline:old() and 0 or #current.declined) > 0
+	local hasRecords = #current.active + #offers + #history + manualCount > 0
 	return builtin.Window {
 		meta = { class = (hasRecords and "tf3-subsidy-populated" or "tf3-subsidy-empty") .. (showNotice and ", tf3-subsidy-feedback-visible" or "") },
 		id = WINDOW_ID,

@@ -268,6 +268,7 @@ script.update(desc.updateScript.params, state, 0)
 assert(#data.proposedSubventions == 1 and data.proposedSubventions[1].uid == 70)
 local review = config(false, true)
 assert(review.count == 2 and review.enabled == false and not archive().automatic.enabled)
+assert(archive().entries[1].revealed and archive().entries[2].revealed)
 assert(archive().notice.count == 2 and #data.proposedSubventions == 1)
 local noticeSequence = archive().notice.sequence
 config(false, false)
@@ -280,6 +281,36 @@ script.update(desc.updateScript.params, state, 1)
 assert(#data.proposedSubventions == 2 and notifiedUids()[82])
 assert(#archive().entries == 2 and committed > 0)
 print('PASS: atomic suppression of native update/event spawns before the shipped notification collector, existing-offer protection, persisted configuration, disable/review and unread notice preservation')
+
+-- Revealed offers remain available after enabling again and across reload.
+config(true, false)
+assert(archive().entries[1].revealed and archive().entries[2].revealed)
+data = copy(data)
+assert(loadfile('mod/tf3_subsidy_manager_1/content/plugins/subsidy_manager/recovery.script.lua', 't', env))()
+script = env.data()
+assert(request('recover', '1').success)
+spawnMode = false
+script.update(desc.updateScript.params, state, 0)
+assert(#data.proposedSubventions == 3 and notifiedUids()[80], 'Opening a revealed offer must protect it from being suppressed again')
+assert(#archive().entries == 1 and archive().entries[1].record.uid == 81)
+spawnMode, spawnUid, forbiddenUid = true, 83, 83
+time = time + 2
+script.update(desc.updateScript.params, state, 1)
+assert(#data.proposedSubventions == 3 and #archive().entries == 2 and not notifiedUids()[83])
+assert(archive().entries[1].revealed and not archive().entries[2].revealed)
+assert(request('recover', archive().entries[2].key).reason == 'unavailable')
+assert(#data.proposedSubventions == 3 and archive().entries[2].status == 'saved')
+local paymentsBefore = payments
+event('', 'Subvention', 'onAccept', {uid = 80})
+assert(#data.activeSubventions == 1 and data.activeSubventions[1].uid == 80 and payments == paymentsBefore + 1)
+config(false, true)
+assert(archive().entries[2].revealed)
+-- Legacy offers already shown with mode off gain persistent flags on enabling.
+archive().entries[1].revealed = nil
+config(true, false)
+assert(archive().entries[1].revealed)
+forbiddenUid = nil
+print('PASS: durable revealed offers, protected opening while enabled, future suppression isolation and legacy visible-offer migration')
 
 -- A changed/failing callback must never create a saved duplicate of a live offer.
 data = world(); config(true, false)
