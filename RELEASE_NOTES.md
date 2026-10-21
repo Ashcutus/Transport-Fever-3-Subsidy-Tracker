@@ -1,5 +1,18 @@
 # Release Notes
 
+## v1.3.0 — Recover previously hidden subsidies
+
+- Updated the real-game gallery with Auto-decline guidance and the missed-offer indicator.
+- When missed offers become available after switching Auto-decline off, the toolbar icon shows its yellow dot too. Opening the manager clears the toolbar dot; opening Offered clears its separate dot.
+- Turning Auto-decline off refreshes the overview immediately and updates it again when the availability check finishes.
+- Auto-decline saves and declines new offers before they reach the offer notification flow, after the game confirms the option. Previously hidden offers do not set the manager’s toolbar dot.
+- Auto-decline stays readable while waiting for a subsidy action, with a “please wait” label, an explanation on hover and retry guidance if confirmation fails.
+- When you switch Auto-decline off, previously hidden offers appear directly in Offered and its count. A yellow dot marks offers waiting for review, with the available count on hover. Opening Offered clears the dot.
+- Missed offers use the normal Offered columns and open the game’s usual details when clicked, with the normal Accept and Decline controls. Show declined includes manual declines too. Once revealed, missed offers stay visible and usable when Auto-decline is enabled again, including after a reload. Only newly incoming offers are hidden.
+- Saved contracts keep their requirements, rewards and remaining offer time. Their offer timer pauses while saved; accepted-task deadlines are unchanged.
+- Offers that are no longer valid appear in History as **Expired**, with an explanation and no failure penalty. Temporary read errors leave the offer available for another attempt.
+- Recovery supports the four vanilla subsidy types and offers saved from this version onward. Older declines cannot be recovered.
+
 ## v1.2.0 — Auto-decline new offers
 
 - Added an optional Auto-decline toggle beside Refresh, off by default, with a short explanatory tooltip.
