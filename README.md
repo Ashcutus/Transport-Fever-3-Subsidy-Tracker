@@ -17,7 +17,7 @@ Compare offers, follow the tasks you've accepted, and see how your subsidies tur
 
 Prefer to skip future offers? Enable **Auto-decline** in the manager. It is off by default, applies only to offers arriving after you enable it, and saves your choice for this game. Existing offers, previously revealed missed offers and accepted tasks are left alone. New offers are saved and declined in the simulation before they become available to the game’s offer notifications, without setting the manager’s toolbar dot. The option takes effect when the game confirms the change. While a subsidy action is finishing, the setting stays readable and shows **please wait**; hover for the reason.
 
-When you switch Auto-decline off, the manager checks saved offers and includes previously hidden contracts directly in **Offered**, with its count updated. A **yellow dot on Offered** marks hidden offers waiting for review; hover to see how many are still available. Opening Offered clears the dot. Use **Show declined** to include manual declines too. Click an offer to open the game’s usual details, then choose Accept or Decline as normal.
+When you switch Auto-decline off, the manager refreshes the overview automatically, checks saved offers and includes previously hidden contracts directly in **Offered**, with its count updated. A **yellow dot on Offered** marks hidden offers waiting for review; hover to see how many are still available. Opening Offered clears the dot. Use **Show declined** to include manual declines too. Click an offer to open the game’s usual details, then choose Accept or Decline as normal.
 
 Recovery keeps the original requirements and rewards. The remaining offer timer pauses while a contract is saved and resumes when recovered; the deadline for an accepted task is unchanged. Saved offers belong to this save. An offer that is no longer valid appears in History as **Expired**, with a reason and no task-failure penalty. Temporary read errors leave it saved and offer **Try again**.
 
@@ -86,7 +86,7 @@ Clearer History with one status per outcome, explanatory tooltips for missing va
 
 ## A few things to know
 
-- **Refresh is manual.** The toolbar dot checks for new offers; it doesn't refresh the table for you.
+- **Switching Auto-decline off refreshes the overview automatically.** Use Refresh for other updates while the window is open. The toolbar dot does not refresh the table.
 - **Task history is kept by the game.** Older outcomes can disappear when TF3 removes them. Saved declines and unsuccessful recoveries are stored separately by this mod for the save.
 - **Worker progress is a native workforce boost percentage.** Zero is shown as “0% Workers” when supplied by the game; it is not a cumulative passenger count.
 - **Some fields may be unavailable.** Open the game's detail window for the full task information.

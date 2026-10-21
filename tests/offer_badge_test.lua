@@ -650,4 +650,40 @@ component.state.tf3SubsidyManagerArchive.response = {
 poll(); tree = render(windowRecipe, windowContext)
 assert(feedback(tree).children[1].text == 'tf3_subsidy_manager_recovery_expired', 'A revealed offer failure must stay understandable with suppression enabled')
 print('PASS: revealed offers persist through enable/Refresh/reload and open normally with suppression enabled; future offers stay hidden and window sizing remains populated')
+
+-- Disabling refreshes immediately, before the later simulation acknowledgement,
+-- retaining the selected tab and rebuilding cells with the latest identities.
+reset({offer(400)}, {autoDecline = {version = 1, enabled = true, offers = {}}})
+component.state.tf3SubsidyManagerArchive = {version = 1, entries = {}, automatic = {enabled = true}, response = {sequence = 0}}
+badge(); poll(); tree = render(windowRecipe, windowContext)
+tree.content.children[1].children[1].onValueChange(2)
+tree = render(windowRecipe, windowContext)
+local beforeDisableKey = tableNode(tree).meta.localKey
+component.state.proposedSubventions = {offer(401)}
+component.state.activeSubventions = {offer(402)}
+component.state.completedSubventions = {offer(403)}
+component.state.tf3SubsidyManagerArchive.entries = {
+    {key = 'missed', record = offer(404), remaining = 50, source = 'automatic', status = 'saved'},
+}
+tree.content.children[1].children[3].onValueChange(0)
+tree = render(windowRecipe, windowContext) -- No poll/confirmation yet.
+local tabControl = tree.content.children[1].children[1]
+assert(tabControl.selected == 2, 'Auto-refresh must retain the selected tab')
+assert(tabControl.buttons[1].content.text == 'tf3_subsidy_manager_active (1)')
+assert(tabControl.buttons[2].content.text == 'tf3_subsidy_manager_offered (2)')
+assert(tabControl.buttons[3].content.text == 'tf3_subsidy_manager_history (1)')
+local automaticTable = tableNode(tree)
+assert(automaticTable.meta.localKey ~= beforeDisableKey)
+assert(#automaticTable.rowKeys == 2 and automaticTable.userParam.entries[1].recordCopy.uid == 401 and automaticTable.userParam.entries[2].recordCopy.uid == 404)
+local confirmationKey = automaticTable.meta.localKey
+component.state.tf3SubsidyManagerArchive.entries[1].status = 'expired'
+component.state.tf3SubsidyManagerArchive.entries[1].reason = 'invalid_destination'
+poll(); tree = render(windowRecipe, windowContext)
+automaticTable = tableNode(tree)
+assert(automaticTable.meta.localKey ~= confirmationKey and #automaticTable.rowKeys == 1, 'Confirmed review must refresh again and remove invalid saved offers')
+assert(tree.content.children[1].children[1].selected == 2)
+local detailCount = #detailEvents
+automaticTable.columns[1].recipe({userParam = automaticTable.userParam, rowKey = 1}).children[1].onClick()
+assert(#detailEvents == detailCount + 1 and detailEvents[#detailEvents].nonEntity == 'subsidy_401', 'Auto-refreshed cells must select the new record')
+print('PASS: immediate disable refresh before confirmation, latest counts/rows, stable tab, rebuilt cells and confirmed review refresh')
 print('PASS: stale acknowledgement rejection, authoritative saved simulation mode and expired-toolbar join cancellation')

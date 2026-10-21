@@ -810,6 +810,7 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 				autoDecline:set(value == 1)
 				showDeclined:set(false)
 				notice:set(nil)
+				if value ~= 1 then refresh() end
 				react.fireEvent(nil, AUTO_DECLINE_EVENT, value == 1)
 				busy:set(pendingArchiveRequest ~= nil)
 			end,
