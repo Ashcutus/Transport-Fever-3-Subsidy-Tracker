@@ -56,6 +56,24 @@ local function remember(data, uid, automatic)
     end
 end
 
+local function identity(record)
+    if type(record) ~= "table" or type(record.id) ~= "string" or not finite(record.uid)
+        or record.uid < 0 or record.uid ~= math.floor(record.uid) or not finite(record.spawnTime) then return nil end
+    return string.format("%d:%s|%.17g|%.17g", #record.id, record.id, record.uid, record.spawnTime)
+end
+
+local function configure(saved, data, enabled)
+    if type(saved.automatic) ~= "table" or saved.automatic.enabled ~= enabled or type(saved.automatic.protected) ~= "table" then
+        saved.automatic = {enabled = enabled, protected = {}}
+        if enabled then
+            for _, record in ipairs(data.proposedSubventions) do
+                local key = identity(record)
+                if key then saved.automatic.protected[key] = true end
+            end
+        end
+    end
+end
+
 local function candidate(entry, data)
     local record = entry.record
     if type(record) ~= "table" or not supported[record.id] or type(record.data) ~= "table"
@@ -87,9 +105,10 @@ local function candidate(entry, data)
     return restored
 end
 
-local function respond(saved, action, key, success, reason, count)
+local function respond(saved, param, action, key, success, reason, count)
     saved.response = {sequence = saved.response.sequence + 1, action = action,
-        key = key, success = success, reason = reason, count = count}
+        key = key, success = success, reason = reason, count = count,
+        requestId = type(param.requestId) == "string" and param.requestId or nil}
 end
 
 local function command(state, param)
@@ -100,11 +119,21 @@ local function command(state, param)
     if type(data) ~= "table" or type(data.proposedSubventions) ~= "table"
         or type(data.activeSubventions) ~= "table" then return end
     local saved = archive(data)
-    if param.action == "review" then
+    if param.action == "configure" then
+        if type(param.enabled) ~= "boolean" then return end
+        configure(saved, data, param.enabled)
+        if param.enabled or param.review ~= true then
+            respond(saved, param, "configure", nil, true)
+            saved.response.enabled, saved.response.review = param.enabled, false
+            state:set(data)
+            return
+        end
+    end
+    if param.action == "review" or (param.action == "configure" and param.review == true) then
         local count = 0
         local unavailable = false
         for _, entry in ipairs(saved.entries) do
-            if entry.status == "saved" and entry.source == "automatic" then
+            if type(entry) == "table" and entry.status == "saved" and entry.source == "automatic" then
                 -- Exceptions mean temporarily unreadable, not an expired offer.
                 local ok, record, reason = pcall(candidate, entry, data)
                 if ok and record then count = count + 1
@@ -112,29 +141,31 @@ local function command(state, param)
                 if not ok then unavailable = true end
             end
         end
-        respond(saved, "review", nil, not unavailable, unavailable and count == 0 and "unavailable" or nil, count)
+        respond(saved, param, param.action, nil, param.action == "configure" or not unavailable, unavailable and count == 0 and "unavailable" or nil, count)
+        if param.action == "configure" then saved.response.enabled, saved.response.review = false, true end
+        saved.notice = copy(saved.response)
     elseif param.action == "recover" and type(param.key) == "string" then
         for index, entry in ipairs(saved.entries) do
-            if entry.key == param.key and entry.status == "saved" then
+            if type(entry) == "table" and entry.key == param.key and entry.status == "saved" then
                 local ok, record, reason = pcall(candidate, entry, data)
                 if not ok then
-                    respond(saved, "recover", entry.key, false, "unavailable")
+                    respond(saved, param, "recover", entry.key, false, "unavailable")
                 elseif not record then
                     entry.status, entry.reason = "expired", reason
-                    respond(saved, "recover", entry.key, false, reason)
+                    respond(saved, param, "recover", entry.key, false, reason)
                 else
                     data.usedUids = data.usedUids or {}
                     data.usedUids[record.id] = data.usedUids[record.id] or {}
                     data.usedUids[record.id][tostring(record.uid)] = true
                     table.insert(data.proposedSubventions, record)
                     table.remove(saved.entries, index)
-                    respond(saved, "recover", param.key, true)
+                    respond(saved, param, "recover", param.key, true)
                 end
                 state:set(data)
                 return
             end
         end
-        respond(saved, "recover", param.key, false, "not_found")
+        respond(saved, param, "recover", param.key, false, "not_found")
     else
         return
     end
@@ -145,11 +176,58 @@ local function original(params)
     return assert(util.useFn(params.original), "Original subsidy callback unavailable")
 end
 
+local suppressionWarnings = {}
+local function runNative(params, state, fn, ...)
+    -- Buffer the native script's writes, suppress new offers using its
+    -- own decline handler, then expose one final state to other scripts.
+    -- Notifications can never observe the intermediate proposed offers.
+    local staged, wrote
+    local proxy = setmetatable({
+        get = function() return wrote and copy(staged) or state:get() end,
+        set = function(_, value) staged, wrote = value, true end,
+    }, {__index = function(_, key)
+        local member = state[key]
+        if type(member) == "function" then return function(_, ...) return member(state, ...) end end
+        return member
+    end})
+    local result = fn(params.originalParams or {}, proxy, ...)
+    if wrote then
+        local saved = staged[FIELD]
+        local automatic = type(saved) == "table" and saved.version == 1 and saved.automatic
+        if type(automatic) == "table" and automatic.enabled == true and type(automatic.protected) == "table" then
+            local keep = {}
+            for _, record in ipairs(copy(staged.proposedSubventions)) do
+                local key = identity(record)
+                if key and automatic.protected[key] then keep[key] = true
+                elseif key then
+                    local before = copy(staged)
+                    local ok, err = pcall(function()
+                        remember(staged, record.uid, true)
+                        local decline = assert(util.useFn(params.nativeEvent))
+                        decline(params.nativeEventParams or {}, proxy, AUTO_SOURCE, "Subvention", "onDecline", {uid = record.uid})
+                        for _, remaining in ipairs(staged.proposedSubventions) do
+                            assert(remaining.uid ~= record.uid, "Native decline did not remove offer")
+                        end
+                    end)
+                    if not ok then
+                        staged = before
+                        if not suppressionWarnings[key] then log.warning("[tf3_subsidy_manager] Suppression unavailable: " .. tostring(err)) end
+                        suppressionWarnings[key] = true
+                    else suppressionWarnings[key] = nil end
+                end
+            end
+            staged[FIELD].automatic.protected = keep
+        end
+        state:set(staged)
+    end
+    return result
+end
+
 function data()
     local subscribed = false
     return {
         update = function(params, state, dt)
-            local result = original(params)(params.originalParams or {}, state, dt)
+            local result = runNative(params, state, original(params), dt)
             if not subscribed then state:subscribeToEvent(NAMESPACE); subscribed = true end
             return result
         end,
@@ -175,7 +253,7 @@ function data()
                     state:set(saved)
                 end
             end
-            local result = original(params)(params.originalParams or {}, state, src, id, name, param)
+            local result = runNative(params, state, original(params), src, id, name, param)
             if not subscribed or id == "" then state:subscribeToEvent(NAMESPACE); subscribed = true end
             return result
         end,

@@ -102,10 +102,26 @@ local function check(code, expectWrapper)
     -- Badge wrapper must return a Component; its FloatingLayout owns widget children.
     local badgeId = assert(ids.TF3SubsidyManagerOfferBadgeIcon)
     assert(registry.recipeMetas[badgeId].innerRecipeId == registry.builtin.Component)
+    function context:declareRef(value) return {get = function() return value end, set = function(_, nextValue) value = nextValue end} end
     function context:declareRefLazy(fn) local value = fn(); return {get = function() return value end} end
     function context:onEvent(_, name) assert(name == "tf3SubsidyManagerOffersOpened" or name == "tf3SubsidyManagerAutoDecline" or name == "tf3SubsidyManagerArchiveRequest") end
     context.currentRecipeId = badgeId
     registry.recipes[badgeId](context, {props = {{}}})
+    -- Execute the shipped two-phase queues. Restricted engine reads must not
+    -- execute GUI effects until the separate main-thread join phase.
+    local restricted, applied = true, 0
+    react.enqueueDeferredStep(function()
+        assert(restricted)
+        react.enqueueJoin(function()
+            assert(not restricted, 'GUI effect executed in restricted deferred phase')
+            applied = applied + 1
+        end, 'contract-test:main-effects')
+    end)
+    reactEnv._reactDoExecuteDeferredSteps()
+    assert(applied == 0)
+    restricted = false
+    reactEnv._reactDoExecuteJoins()
+    assert(applied == 1)
     local badgeComponent = nodes[context.result[1]]
     assert(badgeComponent.recipeId == registry.builtin.Component)
     local layout = nodes[badgeComponent.props.props[1].layout]

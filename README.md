@@ -15,7 +15,7 @@ Compare offers, follow the tasks you've accepted, and see how your subsidies tur
 - **Review your results.** History brings together successful and failed subsidies while the game retains them.
 - **Know when something new arrives.** A small dot on the toolbar icon marks new offers since you last opened the manager.
 
-Prefer to skip future offers? Enable **Auto-decline** in the manager. It is off by default, applies only to offers arriving after you enable it, and saves your choice for this game. Existing offers and accepted tasks are left alone. New offers are quietly saved before the game’s normal Decline action, without setting the manager’s toolbar dot.
+Prefer to skip future offers? Enable **Auto-decline** in the manager. It is off by default, applies only to offers arriving after you enable it, and saves your choice for this game. Existing offers and accepted tasks are left alone. New offers are saved and declined in the simulation before they become available to the game’s offer notifications, without setting the manager’s toolbar dot. The option takes effect when the game confirms the change.
 
 When you switch Auto-decline off, the manager checks the saved offers. If any remain valid, it tells you **“X previously hidden subsidies are still available.”** Choose **Review offers**, or enable **Show declined** in Offered, to review saved automatic and manual declines. Choose **Recover** to restore a contract and open its native details; you still choose whether to Accept or Decline.
 
@@ -92,7 +92,7 @@ Clearer History with one status per outcome, explanatory tooltips for missing va
 - **Some fields may be unavailable.** Open the game's detail window for the full task information.
 - **English is currently the supplied language.**
 
-Earlier releases have been tested in real saves on Linux, including the In Progress and History tables and all three compact empty views. The new recovery flow still needs in-game verification and updated screenshots; the gallery above shows earlier releases. Gameplay testing on Windows, macOS, Xbox and PlayStation has not been performed. Mods that change the same toolbar or subsidy interface may conflict.
+Earlier releases have been tested in real saves on Linux, including the In Progress and History tables and all three compact empty views. The corrected Auto-decline and recovery flow still need in-game verification and updated screenshots; the gallery above shows earlier releases. Gameplay testing on Windows, macOS, Xbox and PlayStation has not been performed. Mods that change the same toolbar or subsidy interface may conflict.
 
 ## Feedback
 

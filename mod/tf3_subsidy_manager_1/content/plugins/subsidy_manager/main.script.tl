@@ -16,28 +16,32 @@ local ARCHIVE_REQUEST_EVENT = "tf3SubsidyManagerArchiveRequest"
 local ARCHIVE_REPLY_EVENT = "tf3SubsidyManagerArchiveReply"
 local ARCHIVE_RECOVER_EVENT = "tf3SubsidyManagerArchiveRecover"
 local pendingArchiveRequest : {any : any} = nil
+local archiveRequestSession = tostring({})
+local archiveRequestSerial = 0
 
-local function sendArchiveRequest(action : string, key : string, sequence : number)
+local function sendArchiveRequest(action : string, key : string, sequence : number, enabled? : boolean, review? : boolean)
 	if pendingArchiveRequest then return end
-	pendingArchiveRequest = { action = action, key = key, sequence = sequence, attempts = 0 }
+	archiveRequestSerial = archiveRequestSerial + 1
+	local requestId = archiveRequestSession .. ":" .. tostring(archiveRequestSerial)
+	pendingArchiveRequest = { action = action, key = key, sequence = sequence, attempts = 0, enabled = enabled, review = review, requestId = requestId }
 	local ok = pcall(function()
-		api.cmd.sendCommand(api.cmd.makeScriptingSendEventCmd(MOD_ID, "tf3SubsidyManager", "tf3SubsidyManager", { action = action, key = key }))
+		api.cmd.sendCommand(api.cmd.makeScriptingSendEventCmd(MOD_ID, "tf3SubsidyManager", "tf3SubsidyManager", { action = action, key = key, enabled = enabled, review = review, requestId = requestId }))
 	end)
 	if not ok then
 		pendingArchiveRequest = nil
-		react.fireEvent(nil, ARCHIVE_REPLY_EVENT, { action = action, key = key, success = false, reason = "unavailable", sequence = sequence })
+		react.fireEvent(nil, ARCHIVE_REPLY_EVENT, { action = action, key = key, success = false, reason = "unavailable", sequence = sequence, enabled = enabled, review = review })
 	end
 end
 
-local function checkArchiveReply()
-	if not pendingArchiveRequest then return end
-	pendingArchiveRequest.attempts = (pendingArchiveRequest.attempts as number) + 1
+local function readArchiveReply() : {any : any}
+	local nativeEnabled : boolean = nil
 	local ok, value = pcall(function() : any
 		local entity = api.engine.system.gameScriptSystem.getEntityForGameScript(SUBVENTION_SCRIPT)
 		if not entity or not api.engine.entityExists(entity) then return nil end
 		local component = api.engine.getComponent(entity, api.type.ComponentType.GAME_SCRIPT) as Engine.Component.GameScript<SubventionState>
 		local state = component and component.state as {any : any}
 		local archive = state and state.tf3SubsidyManagerArchive as {any : any}
+		if archive and type(archive.automatic) == "table" and type((archive.automatic as table).enabled) == "boolean" then nativeEnabled = (archive.automatic as table).enabled as boolean end
 		return archive and archive.response
 	end)
 	local response : {any : any} = {}
@@ -46,11 +50,18 @@ local function checkArchiveReply()
 			if type(child) == "string" or type(child) == "number" or type(child) == "boolean" then response[key] = child end
 		end
 	end
-	local matches = type(response.sequence) == "number" and (response.sequence as number) < math.huge and (response.sequence as number) > (pendingArchiveRequest.sequence as number) and response.action == pendingArchiveRequest.action
+	if nativeEnabled ~= nil then response.modeEnabled = nativeEnabled end
+	return response
+end
+
+local function checkArchiveReply(request : {any : any}, response : {any : any})
+	if not request or request ~= pendingArchiveRequest then return end
+	pendingArchiveRequest.attempts = (pendingArchiveRequest.attempts as number) + 1
+	local matches = response.requestId == request.requestId and type(response.sequence) == "number" and (response.sequence as number) < math.huge and (response.sequence as number) > (pendingArchiveRequest.sequence as number) and response.action == pendingArchiveRequest.action
 	if response.action == "recover" and response.key ~= pendingArchiveRequest.key then matches = false end
 	if not matches then
 		if (pendingArchiveRequest.attempts as number) < 4 then return end
-		response = { action = pendingArchiveRequest.action, key = pendingArchiveRequest.key, sequence = pendingArchiveRequest.sequence, success = false, reason = "unavailable" }
+		response = { action = pendingArchiveRequest.action, key = pendingArchiveRequest.key, sequence = pendingArchiveRequest.sequence, success = false, reason = "unavailable", enabled = pendingArchiveRequest.enabled, review = pendingArchiveRequest.review }
 	end
 	pendingArchiveRequest = nil
 	react.fireEvent(nil, ARCHIVE_REPLY_EVENT, response)
@@ -154,59 +165,62 @@ end
 local OfferBadgeIcon = react.RegisterWrapperRecipe("TF3SubsidyManagerOfferBadgeIcon", builtin.Component, function(_params : Builtin.ComponentParam) : TreeNodeId
 	local tracked : ReactRefT<OfferBadgeState> = react.useRefLazy(loadOfferBadge)
 	local automatic : ReactRefT<AutoDeclineState> = react.useRefLazy(loadAutoDecline)
-	local pending : ReactStateT<boolean> = engineReactUtil.useStepStateTimer(function() : boolean
-		-- Only explicit review/recovery commands read their small acknowledgement.
-		-- This never refreshes ordinary overview tables or formats cards on a timer.
-		checkArchiveReply()
-		local badge = tracked:get()
+	local synchronized : ReactRefT<boolean> = react.useRef(false)
+	local pending : ReactStateT<boolean>
+	pending = engineReactUtil.useStepStateTimer(function() : boolean
+		-- Native timer callbacks execute in the restricted deferred-read phase.
+		-- Only collect detached engine data here. All effects run in enqueueJoin.
+		local requestAtRead = pendingArchiveRequest
+		local response = requestAtRead and readArchiveReply() or nil
 		local uids : {string : integer} = {}
 		local ok, result = pcall(queryOfferIdentities, uids)
-		if not ok or not result then return badge.pending end
-		local offers = result as {string : boolean}
-		local setting = automatic:get()
-		local seen : {string : boolean} = {}
-		for key, _value in pairs(offers) do
-			local handled = true
-			if setting.enabled and setting.initialized and not setting.offers[key] then
-				-- Match the vanilla Decline action; never mutate GAME_SCRIPT tables.
-				handled = pcall(function()
-					api.cmd.sendCommand(api.cmd.makeScriptingSendEventCmd(MOD_ID .. ":auto", "Subvention", "onDecline", { uid = uids[key] }))
-				end)
+		local offers = ok and result as {string : boolean} or nil
+		react.enqueueJoin(function()
+			if pending:hasExpired() then return end
+			checkArchiveReply(requestAtRead, response)
+			local badge = tracked:get()
+			if not offers then return end
+			local setting = automatic:get()
+			if not synchronized:get() and not pendingArchiveRequest then
+				local previous = readArchiveReply()
+				-- The simulation's saved choice is authoritative after migration.
+				if type(previous.modeEnabled) == "boolean" and previous.modeEnabled ~= setting.enabled then
+					setting.enabled = previous.modeEnabled as boolean
+					setting.dirty = true
+				end
+				sendArchiveRequest("configure", nil, (previous.sequence or 0) as number, setting.enabled, false)
+				synchronized:set(true)
 			end
-			if handled then seen[key] = true end
-		end
-		if not setting.initialized then setting.dirty = setting.enabled or setting.dirty end
-		for key, _value in pairs(seen) do if not setting.offers[key] then setting.dirty = setting.enabled or setting.dirty end end
-		for key, _value in pairs(setting.offers) do if not seen[key] then setting.dirty = setting.enabled or setting.dirty end end
-		setting.initialized, setting.offers = true, seen
-		-- Retry failed persistence on valid ticks, preserving independent badge data.
-		if setting.dirty then setting.dirty = not saveAutoDecline(setting) end
-		local changed = not badge.initialized
-		for key, _value in pairs(offers) do
-			if not badge.offers[key] then
-				if badge.initialized and not setting.enabled then badge.pending = true end
-				changed = true
+			if setting.dirty then setting.dirty = not saveAutoDecline(setting) end
+			local changed = not badge.initialized
+			for key, _value in pairs(offers) do
+				if not badge.offers[key] then
+					if badge.initialized and not setting.enabled then badge.pending = true end
+					changed = true
+				end
 			end
-		end
-		for key, _value in pairs(badge.offers) do if not offers[key] then changed = true end end
-		badge.initialized, badge.offers = true, offers
-		if changed or badge.dirty then badge.dirty = not saveOfferBadge(badge) end
-		return badge.pending
+			for key, _value in pairs(badge.offers) do if not offers[key] then changed = true end end
+			badge.initialized, badge.offers = true, offers
+			if changed or badge.dirty then badge.dirty = not saveOfferBadge(badge) end
+			pending:set(badge.pending)
+		end, "TF3SubsidyManager:offerRead")
+		return tracked:get().pending
 	end, 5)
 	react.onEvent(ARCHIVE_REQUEST_EVENT, function(_name : string, value : any)
 		if type(value) ~= "table" then return end
 		local request = value as {any : any}
-		sendArchiveRequest(request.action as string, request.key as string, request.sequence as number)
+		sendArchiveRequest(request.action as string, request.key as string, request.sequence as number, request.enabled as boolean, request.review as boolean)
 	end)
 	react.onEvent(AUTO_DECLINE_EVENT, function(_name : string, value : any)
 		if type(value) ~= "boolean" then return end
 		local setting = automatic:get()
 		setting.enabled = value as boolean
-		-- Establish a fresh baseline so enabling never declines existing offers.
-		local ok, offers = pcall(queryOfferIdentities, nil)
-		setting.initialized = ok and offers ~= nil
-		setting.offers = setting.initialized and offers as {string : boolean} or {}
+		-- Simulation takes the baseline when this configuration command arrives.
+		-- Future offers are suppressed before commit, not by this GUI timer.
 		setting.dirty = not saveAutoDecline(setting)
+		local previous = readArchiveReply()
+		sendArchiveRequest("configure", nil, (previous.sequence or 0) as number, setting.enabled, not setting.enabled)
+		synchronized:set(true)
 	end)
 	react.onEvent(OFFERS_OPENED_EVENT, function(_name : string, data : any)
 		if type(data) ~= "table" then return end
@@ -262,6 +276,7 @@ local record Snapshot
 	declined : {Entry}
 	expired : {Entry}
 	archiveResponse : {any : any}
+	archiveNotice : {any : any}
 end
 
 local function emptySnapshot() : Snapshot
@@ -276,6 +291,7 @@ local function emptySnapshot() : Snapshot
 		declined = {},
 		expired = {},
 		archiveResponse = { sequence = 0 },
+		archiveNotice = { sequence = 0 },
 	}
 end
 
@@ -401,6 +417,8 @@ local function querySnapshot() : Snapshot
 	local archive = (state as {any : any}).tf3SubsidyManagerArchive as {any : any}
 	if type(archive) == "table" and archive.version == 1 and type(archive.entries) == "table" then
 		if type(archive.response) == "table" then snapshot.archiveResponse = copyTable(archive.response) as {any : any} end
+		local savedNotice = type(archive.notice) == "table" and archive.notice or archive.response
+		if type(savedNotice) == "table" then snapshot.archiveNotice = copyTable(savedNotice) as {any : any} end
 		for _index, value in ipairs(archive.entries as {{any : any}}) do
 			if type(value) == "table" and type(value.record) == "table" and type(value.key) == "string" then
 				local entries = copyEntries({value.record as ISubvention}, false, value.status == "expired" and "expired" or value.source == "automatic" and "hidden" or "declined")
@@ -641,14 +659,15 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 	local showDeclined : ReactStateT<boolean> = react.useState(false)
 	local busy : ReactStateT<boolean> = react.useState(pendingArchiveRequest ~= nil)
 	local notice : ReactStateT<{any : any}> = react.useStateLazy(function() : {any : any}
-		local response = snapshot:old().archiveResponse
-		if not autoDecline:old() and type(response.sequence) == "number" and (response.sequence as number) > acknowledgedArchiveSequence() then return response end
+		local response = snapshot:old().archiveNotice
+		if response.action == "configure" and response.review == true and response.success == true then response.action = "review" end
+		if (not autoDecline:old() or (response.action == "configure" and response.reason == "unavailable")) and type(response.sequence) == "number" and (response.sequence as number) > acknowledgedArchiveSequence() then return response end
 		return nil
 	end)
-	local function request(action : string, key : string, disabling? : boolean)
+	local function request(action : string, key : string, disabling? : boolean, enabled? : boolean, review? : boolean)
 		if busy:old() or pendingArchiveRequest or (autoDecline:old() and not disabling) then return end
 		busy:set(true)
-		react.fireEvent(nil, ARCHIVE_REQUEST_EVENT, { action = action, key = key, sequence = snapshot:old().archiveResponse.sequence or 0 })
+		react.fireEvent(nil, ARCHIVE_REQUEST_EVENT, { action = action, key = key, sequence = snapshot:old().archiveResponse.sequence or 0, enabled = enabled, review = review })
 	end
 	react.onEvent(ARCHIVE_RECOVER_EVENT, function(_name : string, key : any)
 		if type(key) == "string" then request("recover", key as string) end
@@ -657,6 +676,13 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 		if type(value) ~= "table" then return end
 		local reply = value as {any : any}
 		busy:set(false)
+		if reply.action == "configure" then
+			if reply.success == true then
+				autoDecline:set(reply.enabled == true)
+				if reply.review ~= true then return end
+				reply.action = "review"
+			end
+		end
 		notice:set(reply)
 		local updated = readSnapshot()
 		if reply.action == "recover" and reply.success == true then
@@ -715,12 +741,11 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 			label = _("tf3_subsidy_manager_auto_decline"), value = autoDecline:old() and 1 or 0,
 			onValueChange = function(value : integer)
 				if busy:old() or pendingArchiveRequest then return end
-				local wasEnabled = autoDecline:old()
 				autoDecline:set(value == 1)
 				showDeclined:set(false)
 				notice:set(nil)
 				react.fireEvent(nil, AUTO_DECLINE_EVENT, value == 1)
-				if wasEnabled and value ~= 1 then request("review", nil, true) end
+				busy:set(pendingArchiveRequest ~= nil)
 			end,
 		},
 	}
@@ -734,7 +759,7 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 		}
 	end
 	local message = notice:old()
-	local showNotice = not autoDecline:old() and ((busy:old() and pendingArchiveRequest ~= nil and pendingArchiveRequest.action == "recover") or (not busy:old() and message ~= nil and (message.reason == "unavailable" or message.action == "recover" or (message.action == "review" and type(message.count) == "number" and (message.count as number) > 0))))
+	local showNotice = (not autoDecline:old() or (message ~= nil and message.action == "configure" and message.reason == "unavailable")) and ((busy:old() and pendingArchiveRequest ~= nil and pendingArchiveRequest.action == "recover") or (not busy:old() and message ~= nil and (message.reason == "unavailable" or message.action == "recover" or (message.action == "review" and type(message.count) == "number" and (message.count as number) > 0))))
 	local controls = builtin.BoxLayout {
 		meta = { class = "tf3-subsidy-controls" }, orientation = builtin.type.Orientation.Horizontal,
 		children = controlChildren,
@@ -743,7 +768,8 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 	if showNotice then
 		local text = _("tf3_subsidy_manager_checking_saved")
 		if not busy:old() and message then
-			if message.reason == "unavailable" then text = _("tf3_subsidy_manager_recovery_unavailable")
+			if message.action == "configure" and message.reason == "unavailable" then text = _("tf3_subsidy_manager_configuration_unavailable")
+			elseif message.reason == "unavailable" then text = _("tf3_subsidy_manager_recovery_unavailable")
 			elseif message.action == "review" then
 				text = string.format(_(message.count == 1 and "tf3_subsidy_manager_hidden_available_one" or "tf3_subsidy_manager_hidden_available"), message.count)
 			elseif message.success == true then text = _("tf3_subsidy_manager_recovered")
@@ -753,7 +779,7 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 		if not busy:old() then
 			if message and message.reason == "unavailable" then feedback[#feedback + 1] = builtin.Button {
 				content = builtin.TextView { text = _("tf3_subsidy_manager_retry") },
-				onClick = function() request(message.action as string, message.key as string) end,
+				onClick = function() request(message.action as string, message.key as string, message.action == "configure", message.enabled as boolean, message.review as boolean) end,
 			} end
 			if message and message.action == "review" and message.reason ~= "unavailable" then feedback[#feedback + 1] = builtin.Button {
 				content = builtin.TextView { text = _("tf3_subsidy_manager_review_offers") },

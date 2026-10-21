@@ -21,13 +21,27 @@ end
 local function offer(uid, id, time)
     return {id = id or "native-offer.res", uid = uid, spawnTime = time or 100, data = {}}
 end
-local commands, archiveCommands, commandFailure = {}, {}, false
+local commands, archiveCommands, configCommands, commandFailure = {}, {}, {}, false
 local saved, component, writes, cardReads, engineReads = nil, nil, 0, 0, 0
 local getFailure, setFailure, engineFailure, unavailable = false, false, false, false
 local function world(offers)
     return {state = {proposedSubventions = offers, activeSubventions = {}, completedSubventions = {}, failedSubventions = {}}}
 end
 local function context() return {refs = {}, states = {}, events = {}, mounts = {}, timers = {}} end
+local restricted, joins, forbidden = false, {}, {}
+local function requireMain(name)
+    if restricted then
+        forbidden[#forbidden + 1] = name
+        error('API is currently restricted: ' .. name)
+    end
+end
+local function flushJoins()
+    assert(not restricted)
+    while #joins > 0 do
+        local batch = joins; joins = {}
+        for _, fn in ipairs(batch) do fn() end
+    end
+end
 local badgeContext, windowContext, activeContext
 local badgeRecipe, windowRecipe, toolbar, replacements, builtin, react
 local function boot()
@@ -52,7 +66,7 @@ local function boot()
     function react.useRefLazy(fn)
         local ctx = activeContext; ctx.refIndex = ctx.refIndex + 1
         if not ctx.refs[ctx.refIndex] then
-            ctx.refs[ctx.refIndex] = {value = fn(), get = function(self) return self.value end}
+            ctx.refs[ctx.refIndex] = {value = fn(), get = function(self) return self.value end, set = function(self, value) self.value = value end}
         end
         return ctx.refs[ctx.refIndex]
     end
@@ -71,9 +85,11 @@ local function boot()
         assert(interval == 5, "Badge must use conservative native timer, not every frame")
         activeContext.timers[1] = {tick = fn, interval = interval}
     end
+    function react.enqueueJoin(fn) joins[#joins + 1] = fn end
     function react.onEvent(name, fn) activeContext.events[name] = fn end
     function react.onMount(fn) activeContext.mounts[#activeContext.mounts + 1] = fn end
     function react.fireEvent(_, name, data)
+        requireMain("react.fireEvent")
         local listener = badgeContext.events[name]
         if listener then listener(name, data) end
         local windowListener = windowContext.events[name]
@@ -96,12 +112,19 @@ local function boot()
         makeScriptingSendEventCmd = function(namespace, target, event, data)
             assert((namespace == "tf3_subsidy_manager:auto" and target == "Subvention" and event == "onDecline")
                 or (namespace == "tf3_subsidy_manager" and target == "tf3SubsidyManager" and event == target))
-            return {uid = data.uid, action = data.action, key = data.key}
+            return {uid = data.uid, action = data.action, key = data.key, enabled = data.enabled, review = data.review, requestId = data.requestId}
         end,
         sendCommand = function(command)
+            requireMain("sendCommand")
             if commandFailure then error("command unavailable") end
-            if command.action then
-                archiveCommands[#archiveCommands + 1] = command
+            if command.action == 'configure' then
+                configCommands[#configCommands + 1] = command
+                if command.review then archiveCommands[#archiveCommands + 1] = command end
+                -- Model simulation acknowledgement, not a GUI write to gameplay.
+                local a = component.state.tf3SubsidyManagerArchive or {version = 1, entries = {}, response = {sequence = 0}}
+                a.response = {sequence = a.response.sequence + 1, action = 'configure', enabled = command.enabled, review = command.review, success = true, count = 0, requestId = command.requestId}
+                component.state.tf3SubsidyManagerArchive = a
+            elseif command.action then archiveCommands[#archiveCommands + 1] = command
             else commands[#commands + 1] = command end
         end,
     }, type = {ComponentType = {GAME_SCRIPT = 1}}, engine = {
@@ -120,6 +143,7 @@ local function boot()
             return copy(saved)
         end,
         setGuiSaveData = function(id, data)
+            requireMain("setGuiSaveData")
             assert(id == "tf3_subsidy_manager")
             if setFailure then error("bad GUI data write") end
             writes = writes + 1; saved = copy(data)
@@ -154,7 +178,7 @@ local function boot()
 end
 local function render(recipe, ctx)
     activeContext = ctx; ctx.refIndex, ctx.stateIndex, ctx.mounts = 0, 0, {}
-    return recipe({})
+    local node = recipe({}); flushJoins(); return node
 end
 local function badge()
     local node = render(badgeRecipe, badgeContext)
@@ -171,7 +195,13 @@ local function badge()
     return #children == 2
 end
 local function poll()
-    local timer = assert(badgeContext.timers[1]); timer.tick()
+    local timer = assert(badgeContext.timers[1])
+    restricted = true
+    local ok, err = pcall(timer.tick)
+    restricted = false
+    assert(ok, err)
+    assert(#forbidden == 0, 'Restricted API calls (even if swallowed): ' .. table.concat(forbidden, ', '))
+    flushJoins()
     return badge()
 end
 local function open(mount)
@@ -266,52 +296,38 @@ if nativeEngineCode then
 end
 print("PASS: offer badge baseline/new/unchanged offers, sticky dismissal/removal, mount acknowledgement, GUI persistence/reload/errors, identity-only native timer and scoped toolbar overlay")
 
--- Auto-decline shares the native timer and only acts on future valid proposed offers.
+-- Auto-decline configuration is a main-thread command. Future suppression is
+-- tested in subsidy_recovery_test against the native simulation callbacks.
 local loadEnabled = false
 local function toggle(value)
+    poll() -- Complete any initial saved-preference synchronization.
     local tree = render(windowRecipe, windowContext)
     local checkbox = tree.content.children[1].children[3]
-    assert(tree.content.children[1].children[2].kind == "Button", "Toggle follows Refresh on the same row")
-    assert(checkbox.kind == "CheckBox" and checkbox.value == (loadEnabled and 1 or 0))
-    assert(checkbox.meta.tooltip == "tf3_subsidy_manager_auto_decline_tooltip")
+    assert(checkbox.kind == 'CheckBox' and checkbox.value == (loadEnabled and 1 or 0))
     checkbox.onValueChange(value and 1 or 0)
     loadEnabled = value
-    if not value and #archiveCommands > 0 then
-        component.state.tf3SubsidyManagerArchive = {version = 1, entries = {}, response = {sequence = #archiveCommands, action = "review", count = 0}}
-        poll()
-    end
+    poll()
 end
-reset({offer(1)}, {unrelated = {keep = true}}); commands = {}; loadEnabled = false
-assert(not badge()); poll(); assert(#commands == 0)
-toggle(true); assert(saved.autoDecline.enabled and saved.unrelated.keep)
-poll(); assert(#commands == 0, "Existing offers must survive enabling")
-component = world({offer(1), offer(2), offer(-1), offer(0/0), offer(3, "", 100)})
-component.state.activeSubventions = {offer(8)}
-local beforeCards = cardReads
-poll(); assert(#commands == 1 and commands[1].uid == 2 and cardReads == beforeCards)
-poll(); assert(#commands == 1, "Do not repeatedly send while engine delivery is pending")
--- Opening/acknowledging the badge must not erase the separate auto-decline baseline.
-component = world({offer(1), offer(2), offer(4)})
-open(); poll(); assert(#commands == 2 and commands[2].uid == 4)
-boot(); badge(); poll(); assert(#commands == 2, "Persist dispatched identities across reload")
-toggle(false); component = world({offer(5)}); poll(); assert(#commands == 2)
-toggle(true); poll(); assert(#commands == 2, "Re-enabling establishes a fresh baseline")
-component = world({offer(5), offer(6)}); commandFailure = true
-poll(); assert(#commands == 2)
-commandFailure = false; poll(); assert(#commands == 3 and commands[3].uid == 6)
-setFailure = true; toggle(false); assert(saved.autoDecline.enabled)
-setFailure = false; poll(); assert(not saved.autoDecline.enabled, "Retry saving disabled preference")
--- Failed enable reads baseline the first valid result instead of declining existing offers.
-engineFailure = true; toggle(true); poll(); engineFailure = false
-component = world({offer(7)}); poll(); assert(#commands == 3)
-component = world({offer(7), offer(9)}); poll(); assert(#commands == 4 and commands[4].uid == 9)
-for _, malformed in ipairs({false, {version = 0}, {version = 1, enabled = "yes", offers = {}},
+reset({offer(1)}, {unrelated = {keep = true}})
+commands, archiveCommands, configCommands, loadEnabled = {}, {}, {}, false
+assert(not badge()); poll()
+toggle(true)
+assert(saved.autoDecline.enabled and saved.unrelated.keep)
+assert(configCommands[#configCommands].enabled == true)
+component.state.proposedSubventions = {offer(1), offer(2)}
+local before = #configCommands
+assert(not poll() and #commands == 0 and #configCommands == before,
+    'GUI timer must not issue decline commands or repeatedly configure simulation')
+assert(not saved.offerBadge.pending)
+toggle(false)
+assert(not saved.autoDecline.enabled and configCommands[#configCommands].review == true)
+for _, malformed in ipairs({false, {version = 0}, {version = 1, enabled = 'yes', offers = {}},
     {version = 1, enabled = true, offers = {bad = false}}}) do
     reset({offer(10)}, {autoDecline = malformed}); loadEnabled = false
-    badge(); poll(); assert(#commands == 4, "Malformed preferences default off")
-    toggle(false)
+    badge(); poll()
+    assert(configCommands[#configCommands].enabled == false, 'Malformed preferences default off')
 end
-print("PASS: auto-decline default off, future-only commands, validation, no duplicate dispatch, independent acknowledgement, reload, disable/re-enable, command/save/query failures")
+print('PASS: main-thread saved-preference synchronization/configuration, future-only simulation policy, quiet badge and no GUI timer decline commands')
 
 -- Quiet suppression and the explicit review/recovery acknowledgement path.
 local function findNode(node, predicate)
@@ -339,7 +355,7 @@ reset({}, {unrelated = 'keep'}); commands, archiveCommands, loadEnabled = {}, {}
 assert(not badge()); toggle(true)
 component.state.proposedSubventions = {offer(101)}
 assert(not poll() and not saved.offerBadge.pending, 'Suppressed offers must not set the toolbar dot')
-assert(#commands == 1 and #archiveCommands == 0 and not feedback(render(windowRecipe, windowContext)))
+assert(#commands == 0 and #archiveCommands == 0 and not feedback(render(windowRecipe, windowContext)))
 local hidden1, hidden2, manual, expired = offer(101), offer(102), offer(103), offer(104)
 for _, r in ipairs({hidden1, hidden2, manual, expired}) do r.data.name = 'Saved contract' end
 component.state.proposedSubventions = {}
@@ -352,9 +368,9 @@ component.state.tf3SubsidyManagerArchive = {version = 1, entries = {
 local tree = render(windowRecipe, windowContext)
 assert(not feedback(tree), 'No recovery notice while suppression remains on')
 tree.content.children[1].children[3].onValueChange(0); loadEnabled = false
-assert(#archiveCommands == 1 and archiveCommands[1].action == 'review', 'Disabling must request a simulation check')
+assert(#archiveCommands == 1 and archiveCommands[1].action == 'configure' and archiveCommands[1].review, 'Disabling must request a simulation check')
 assert(not feedback(render(windowRecipe, windowContext)), 'Do not announce saved offers before the availability check completes')
-component.state.tf3SubsidyManagerArchive.response = {sequence = 1, action = 'review', count = 2, success = true}
+component.state.tf3SubsidyManagerArchive.response = {sequence = 1, action = 'configure', enabled = false, review = true, count = 2, success = true, requestId = archiveCommands[1].requestId}
 poll(); tree = render(windowRecipe, windowContext)
 assert(feedback(tree).children[1].text == 'tf3_subsidy_manager_hidden_available')
 assert(#component.state.proposedSubventions == 0, 'Review must not recreate any offer')
@@ -374,7 +390,7 @@ assert(#archiveCommands == 2 and archiveCommands[2].action == 'recover' and arch
 assert(#tableNode(render(windowRecipe, windowContext)).rowKeys == 3)
 component.state.proposedSubventions = {copy(hidden1)}
 table.remove(component.state.tf3SubsidyManagerArchive.entries, 1)
-component.state.tf3SubsidyManagerArchive.response = {sequence = 2, action = 'recover', key = '1', success = true}
+component.state.tf3SubsidyManagerArchive.response = {sequence = 2, action = 'recover', key = '1', success = true, requestId = archiveCommands[2].requestId}
 poll(); tree = render(windowRecipe, windowContext)
 assert(feedback(tree).children[1].text == 'tf3_subsidy_manager_recovered')
 local previousKey = tableView.meta.localKey
@@ -386,7 +402,7 @@ action.children[1].onClick()
 assert(archiveCommands[3].key == '2')
 component.state.tf3SubsidyManagerArchive.entries[1].status = 'expired'
 component.state.tf3SubsidyManagerArchive.entries[1].reason = 'invalid_destination'
-component.state.tf3SubsidyManagerArchive.response = {sequence = 3, action = 'recover', key = '2', success = false, reason = 'invalid_destination'}
+component.state.tf3SubsidyManagerArchive.response = {sequence = 3, action = 'recover', key = '2', success = false, reason = 'invalid_destination', requestId = archiveCommands[3].requestId}
 poll(); tree = render(windowRecipe, windowContext)
 assert(feedback(tree).children[1].text == 'tf3_subsidy_manager_recovery_expired')
 assert(#component.state.failedSubventions == 0)
@@ -408,8 +424,38 @@ assert(poll() and not feedback(render(windowRecipe, windowContext)))
 toggle(true)
 tree = render(windowRecipe, windowContext)
 tree.content.children[1].children[3].onValueChange(0); loadEnabled = false
+component.state.tf3SubsidyManagerArchive.response.sequence = -1
 for _ = 1, 4 do poll() end
 tree = render(windowRecipe, windowContext)
-assert(feedback(tree).children[1].text == 'tf3_subsidy_manager_recovery_unavailable')
+assert(feedback(tree).children[1].text == 'tf3_subsidy_manager_configuration_unavailable')
 assert(component.state.tf3SubsidyManagerArchive.entries[2].status == 'saved')
 print('PASS: quiet suppression/no dot, review only when resuming flow, async confirmation, Show declined/status/recover, refreshed cells, expired History/reasons, persisted dismissal and bounded transient-error feedback')
+
+-- A delayed response from an earlier request must not satisfy its retry.
+local staleId = archiveCommands[#archiveCommands].requestId
+button(tree, 'tf3_subsidy_manager_retry').onClick()
+local retried = archiveCommands[#archiveCommands]
+assert(retried.requestId ~= staleId)
+component.state.tf3SubsidyManagerArchive.response = {sequence = 100, action = 'configure', enabled = false, review = true, success = true, count = 2, requestId = staleId}
+poll()
+assert(not feedback(render(windowRecipe, windowContext)), 'Stale reply must leave the retry pending')
+component.state.tf3SubsidyManagerArchive.response.requestId = retried.requestId
+poll()
+assert(feedback(render(windowRecipe, windowContext)).children[1].text == 'tf3_subsidy_manager_hidden_available')
+
+-- Saved simulation configuration wins over stale GUI preferences on reload.
+reset({}, {autoDecline = {version = 1, enabled = false, offers = {}}})
+component.state.tf3SubsidyManagerArchive = {version = 1, entries = {}, automatic = {enabled = true}, response = {sequence = 5}}
+badge(); poll()
+assert(saved.autoDecline.enabled and configCommands[#configCommands].enabled)
+
+-- Deferred work that outlives its toolbar must not fire events or persist state.
+local beforeWrites, beforeCommands = writes, #configCommands
+component.state.proposedSubventions = {offer(999)}
+restricted = true
+badgeContext.timers[1].tick()
+restricted = false
+badgeContext.expired = true
+flushJoins()
+assert(writes == beforeWrites and #configCommands == beforeCommands and #forbidden == 0)
+print('PASS: stale acknowledgement rejection, authoritative saved simulation mode and expired-toolbar join cancellation')

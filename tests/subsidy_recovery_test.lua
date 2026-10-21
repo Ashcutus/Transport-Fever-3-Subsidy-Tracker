@@ -13,6 +13,7 @@ local function copy(v)
     if type(v) ~= 'table' then return v end
     local out = {}; for k, child in pairs(v) do out[k] = copy(child) end; return out
 end
+local spawnMode, spawnUid = false, 80
 local time, payments, transient, sent, subs = 100, 0, false, {}, {}
 local kind = '::/game_mechanics/subventions/deliver_workers/deliver_workers.res'
 local function offer(uid, name)
@@ -41,7 +42,7 @@ local api = {type = {ComponentType = {GAME_TIME = 1}}, engine = {
     config = {getModParams = function() return {[''] = {isMapEditor = false}} end},
 }, res = {
     getBaseConfig = function() return {advancedOptions = {subventionMode = 0}} end,
-    genericRep = {getAllOfType = function() return {} end, find = function(id) return id == 'missing' and -1 or 1 end,
+    genericRep = {getAllOfType = function() return spawnMode and {1} or {} end, getName = function() return kind end, find = function(id) return id == 'missing' and -1 or 1 end,
         get = function() return {data = {scriptFile = 'native-helper.script'}} end},
 }, cmd = {makeScriptingSendEventCmd = function(...) return {...} end,
     sendCommand = function(command) sent[#sent + 1] = command end},
@@ -49,7 +50,14 @@ local api = {type = {ComponentType = {GAME_TIME = 1}}, engine = {
 }
 local util = {useFn = function(path)
     if functions[path] then return functions[path] end
+    if path == 'native-helper.script' then return {
+        getRelevantEntities = function(record) return {record.data.target} end,
+        getNotificationParams = function() return {} end,
+    } end
     local method = path:match('native%-helper%.script%.(.+)$')
+    if method == 'canSpawn' then return function() return true end end
+    if method == 'onSpawn' then return function() return offer(spawnUid).data, spawnUid end end
+    if method == 'spawnSpecific' then return function(param) return offer(param.uid).data, param.uid end end
     if method == 'shouldDespawn' then return function(record, current)
         if transient then error('engine temporarily unavailable') end
         if record.data.target == -1 or record.data.revision ~= 4 then return 'InvalidEntity' end
@@ -65,7 +73,7 @@ local util = {useFn = function(path)
     if method == 'getNotificationParams' then return function() return {} end end
     error('Unexpected helper: ' .. path)
 end}
-local env = setmetatable({api = api, log = {warning = function() end}, ug_require = function(path)
+local env = setmetatable({api = api, log = {warning = function() end, verbose = function() end}, ug_require = function(path)
     if path:find('subvention_util.tl', 1, true) then return nativeUtil end
     if path:find('subvention_legacy_util', 1, true) then return {CurrentVersion = 1} end
     if path:find('company_progression_util', 1, true) then return {getCompanyProgressionState = function() return nil end} end
@@ -198,3 +206,95 @@ for _, name in ipairs({'deliver_cargo', 'deliver_cargo_town', 'deliver_passenger
     assert(not helper.isComplete(record), name)
 end
 print('PASS: all four installed native subsidy types retain their real entity-revision and timeout checks')
+
+-- Execute the installed notification collector's subsidy block against every
+-- committed state, including the exact moment the native generator adds offers.
+local function nativeTable(value)
+    return {value = value, find = function(self, key)
+        local child = self.value[key]
+        return type(child) == 'table' and nativeTable(child) or child
+    end, asTable = function(self) return copy(self.value) end}
+end
+local notifyPath = nativeDir .. '/../notifications/notifications.script.tl'
+local file = assert(io.open(notifyPath)); local source = file:read('*a'); file:close()
+local start = assert(source:find('local stateNative = gameScript.state_native', 1, true))
+local finish = assert(source:find('notification_util.updatePersistentNotifications(notificationsState, historyByType, persistentNotifications)', start, true))
+local collectorCode = 'return function(gameScript)\nlocal persistentNotifications = {entitiesAndParam = {}}\n' .. source:sub(start, finish - 1) .. '\nreturn persistentNotifications.entitiesAndParam\nend'
+local collectorEnv = setmetatable({api = api, util = util, entity_util = {
+    makeEntityAndRevision = function(entity) return {entity = entity, revision = {num = {4}}} end,
+    makeEntityAndRevision0Array = function(entities) return entities end,
+}, pairs_native_lua_table = function(value)
+    local key
+    return function()
+        local child; key, child = next(value.value, key)
+        if key then return key, type(child) == 'table' and nativeTable(child) or child end
+    end
+end}, {__index = _G})
+local generated, result = tl.gen(collectorCode)
+assert(generated and #result.syntax_errors == 0)
+local collect = assert(load(generated, 'native-subsidy-notification-collector', 't', collectorEnv))()
+local function notifiedUids()
+    local uids = {}
+    for _, notice in ipairs(collect({state_native = nativeTable(data)})) do uids[notice.param.uid] = true end
+    return uids
+end
+local originalSet = state.set
+local forbiddenUid, committed = nil, 0
+state.set = function(self, value)
+    originalSet(self, value); committed = committed + 1
+    if forbiddenUid then assert(not notifiedUids()[forbiddenUid], 'Hidden offer escaped into native notification input') end
+end
+nativeUtil.getSpawnIntervalDuration = function() return spawnMode and 1 or -1 end
+data = world({offer(70)}); data.lastSpawnTime = 0
+local function config(enabled, review)
+    event('tf3_subsidy_manager', 'tf3SubsidyManager', 'tf3SubsidyManager', {action = 'configure', enabled = enabled, review = review})
+    return archive().response
+end
+assert(config(true, false).success and archive().automatic.enabled)
+spawnMode, spawnUid, forbiddenUid = true, 80, 80
+script.update(desc.updateScript.params, state, 1)
+assert(#data.proposedSubventions == 1 and data.proposedSubventions[1].uid == 70)
+assert(#archive().entries == 1 and archive().entries[1].record.uid == 80 and archive().entries[1].source == 'automatic')
+assert(data.spawnIntervalModifier == 0.5, 'Use the actual native decline handler')
+assert(notifiedUids()[70] and not notifiedUids()[80])
+-- Input-command spawns use the same buffered commit, not just ordinary updates.
+forbiddenUid = 81
+event('', 'Subvention', 'subventionSpawn', {name = kind, specific = {uid = 81}})
+assert(#data.proposedSubventions == 1 and #archive().entries == 2 and not notifiedUids()[81])
+-- Repeated enable/saved-choice synchronization must not reset the protection map.
+assert(config(true, false).success)
+spawnMode = false
+script.update(desc.updateScript.params, state, 0)
+assert(#data.proposedSubventions == 1 and data.proposedSubventions[1].uid == 70)
+local review = config(false, true)
+assert(review.count == 2 and review.enabled == false and not archive().automatic.enabled)
+assert(archive().notice.count == 2 and #data.proposedSubventions == 1)
+local noticeSequence = archive().notice.sequence
+config(false, false)
+assert(archive().notice.sequence == noticeSequence, 'Startup synchronization must not erase an unread resume notice')
+-- Once off, new native offers are visible again; old hidden ones need Recover.
+forbiddenUid = nil
+spawnMode, spawnUid = true, 82
+time = time + 2
+script.update(desc.updateScript.params, state, 1)
+assert(#data.proposedSubventions == 2 and notifiedUids()[82])
+assert(#archive().entries == 2 and committed > 0)
+print('PASS: atomic suppression of native update/event spawns before the shipped notification collector, existing-offer protection, persisted configuration, disable/review and unread notice preservation')
+
+-- A changed/failing callback must never create a saved duplicate of a live offer.
+data = world(); config(true, false)
+local declinePath = desc.updateScript.params.nativeEvent
+local nativeDecline = functions[declinePath]
+functions[declinePath] = function() end
+spawnUid = 90; time = time + 2
+script.update(desc.updateScript.params, state, 1)
+assert(#data.proposedSubventions == 1 and data.proposedSubventions[1].uid == 90 and #archive().entries == 0)
+functions[declinePath] = nativeDecline
+spawnMode = false
+script.update(desc.updateScript.params, state, 0)
+assert(#data.proposedSubventions == 0 and #archive().entries == 1)
+event('tf3_subsidy_manager', 'tf3SubsidyManager', 'tf3SubsidyManager', {action = 'configure', enabled = false, review = true, requestId = 'session:123'})
+assert(archive().response.requestId == 'session:123')
+table.insert(archive().entries, 1, 'malformed')
+assert(request('recover', '1').success, 'Malformed unrelated archive entry must not block valid recovery')
+print('PASS: failed/no-op native declines roll back saved copies, retries remain possible, request correlation and malformed-entry isolation')
