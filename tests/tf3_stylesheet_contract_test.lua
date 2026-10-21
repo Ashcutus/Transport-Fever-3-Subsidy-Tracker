@@ -131,6 +131,18 @@ end
 assert(badgeIcon.size[1] == buttons.statistics and badgeIcon.size[2] == buttons.statistics)
 assert(badgeDot.size[1] == 8 and badgeDot.size[2] == 8 and badgeDot.maxSize[1] == 8)
 assert(badgeText.color and badgeText.fontSize and badgeDot.size[1] < badgeIcon.size[1])
+-- The resume marker belongs only to the Offered label inside this window.
+local offeredDot
+for _, rule in ipairs(list) do
+    local levels = rule.levels
+    if #levels == 2 and levelMatches(levels[2], nil, "tf3-subsidy-offered-dot") then
+        assert(levels[1].id == "tf3-subsidy-manager.window")
+        offeredDot = rule.styleSheet
+    end
+end
+assert(offeredDot and offeredDot.color and offeredDot.color[1] == badgeText.color[1]
+    and offeredDot.color[2] == badgeText.color[2] and offeredDot.color[3] == badgeText.color[3])
+assert(not offeredDot.size and not offeredDot.minSize, 'Inline dot must not impose a fixed tab size')
 -- Mutation checks: explicitly missing either native requirement is rejected.
 local missingTable = {}; for _, rule in ipairs(list) do
     if not (#rule.levels == 2 and rule.levels[2].element == "Table::Layout") then missingTable[#missingTable + 1] = rule end

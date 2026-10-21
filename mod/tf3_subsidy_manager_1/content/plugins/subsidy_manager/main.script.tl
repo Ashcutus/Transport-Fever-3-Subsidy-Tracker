@@ -652,10 +652,6 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 
 	local autoDecline : ReactStateT<boolean> = react.useStateLazy(function() : boolean return loadAutoDecline().enabled end)
 	local generation : ReactStateT<integer> = react.useState(0)
-	local function refresh()
-		snapshot:set(readSnapshot())
-		generation:set(generation:old() + 1)
-	end
 	local showDeclined : ReactStateT<boolean> = react.useState(false)
 	local busy : ReactStateT<boolean> = react.useState(pendingArchiveRequest ~= nil)
 	local notice : ReactStateT<{any : any}> = react.useStateLazy(function() : {any : any}
@@ -664,6 +660,17 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 		if (not autoDecline:old() or (response.action == "configure" and response.reason == "unavailable")) and type(response.sequence) == "number" and (response.sequence as number) > acknowledgedArchiveSequence() then return response end
 		return nil
 	end)
+	local function acknowledgeVisibleReview(reply : {any : any}, updated : Snapshot) : boolean
+		if not reply or reply.action ~= "review" or reply.success ~= true or reply.reason == "unavailable" or selectedTab:old() ~= 2 or not updated.stateFound or updated.readError then return false end
+		acknowledgeArchive(reply.sequence as number)
+		return true
+	end
+	local function refresh()
+		local updated = readSnapshot()
+		if acknowledgeVisibleReview(notice:old(), updated) then notice:set(nil) end
+		snapshot:set(updated)
+		generation:set(generation:old() + 1)
+	end
 	local function request(action : string, key : string, disabling? : boolean, enabled? : boolean, review? : boolean)
 		if busy:old() or pendingArchiveRequest or (autoDecline:old() and not disabling) then return end
 		busy:set(true)
@@ -683,8 +690,12 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 				reply.action = "review"
 			end
 		end
-		notice:set(reply)
 		local updated = readSnapshot()
+		if acknowledgeVisibleReview(reply, updated) then
+			notice:set(nil)
+		else
+			notice:set(reply)
+		end
 		if reply.action == "recover" and reply.success == true then
 			local uid : number = nil
 			for _index, entry in ipairs(snapshot:old().declined) do if entry.archiveKey == reply.key and entry.recordCopy then uid = entry.recordCopy.uid end end
@@ -710,26 +721,54 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 	for _index, item in ipairs(current.failed) do history[#history + 1] = item end
 	for _index, item in ipairs(current.expired) do history[#history + 1] = item end
 	local offers : {Entry} = {}
+	local hiddenCount, manualCount = 0, 0
+	local savedOffersVisible = false
 	for _index, item in ipairs(current.offered) do offers[#offers + 1] = item end
-	if showDeclined:old() and not autoDecline:old() then
-		for _index, item in ipairs(current.declined) do offers[#offers + 1] = item end
+	if not autoDecline:old() then
+		for _index, item in ipairs(current.declined) do
+			if item.outcome == "hidden" then hiddenCount = hiddenCount + 1
+			else manualCount = manualCount + 1 end
+			if item.outcome == "hidden" or showDeclined:old() then
+				offers[#offers + 1] = item
+				savedOffersVisible = true
+			end
+		end
 	end
 	local content : TreeNodeId
 	if current.readError then content = builtin.TextView { text = _("tf3_subsidy_manager_read_error") }
 	elseif not current.stateFound then content = builtin.TextView { text = _("tf3_subsidy_manager_unavailable") }
 	elseif section == 1 then content = renderTable(current.active, section, generation:old())
-	elseif section == 2 then content = renderTable(offers, section, generation:old(), showDeclined:old())
+	elseif section == 2 then content = renderTable(offers, section, generation:old(), savedOffersVisible)
 	else content = renderTable(history, section, generation:old()) end
+	local message = notice:old()
+	local unseenHidden = current.stateFound and not current.readError and not busy:old() and hiddenCount > 0 and message ~= nil and message.action == "review" and message.success == true and message.reason ~= "unavailable" and type(message.count) == "number" and (message.count as number) > 0 and type(message.sequence) == "number" and (message.sequence as number) > acknowledgedArchiveSequence()
 	local buttons : {Builtin.ToggleButtonGroupChildParam} = {}
 	local counts = {#current.active, #offers, #history}
 	for index, label in ipairs({"active", "offered", "history"}) do
 		local count = current.stateFound and (" (" .. counts[index] .. ")") or ""
 		buttons[index] = { content = builtin.TextView { text = _("tf3_subsidy_manager_" .. label) .. count } }
+		if index == 2 and unseenHidden then
+			buttons[index] = {
+				meta = { tooltip = string.format(_(message.count == 1 and "tf3_subsidy_manager_hidden_available_one" or "tf3_subsidy_manager_hidden_available"), message.count) },
+				content = builtin.Component { mouseTransparent = true, layout = builtin.BoxLayout {
+					orientation = builtin.type.Orientation.Horizontal,
+					children = { builtin.TextView { text = _("tf3_subsidy_manager_offered") .. count },
+						builtin.TextView { meta = { class = "tf3-subsidy-offered-dot" }, text = " ●" } },
+				} },
+			}
+		end
 	end
 	local controlChildren : {TreeNodeId} = {
 		builtin.ToggleButtonGroup {
 			buttons = buttons, selected = section, deselectAllowed = false,
-			onValueChange = function(index : integer) if index >= 1 and index <= 3 then selectedTab:set(index) end end,
+			onValueChange = function(index : integer)
+				if index < 1 or index > 3 then return end
+				selectedTab:set(index)
+				if index == 2 and unseenHidden then
+					acknowledgeArchive(message.sequence as number)
+					notice:set(nil)
+				end
+			end,
 		},
 		builtin.Button {
 			meta = { class = "secondary", tooltip = _("tf3_subsidy_manager_refresh_tooltip") },
@@ -749,7 +788,7 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 			end,
 		},
 	}
-	if section == 2 and not autoDecline:old() and #current.declined > 0 then
+	if section == 2 and not autoDecline:old() and manualCount > 0 then
 		controlChildren[#controlChildren + 1] = builtin.CheckBox {
 			label = _("tf3_subsidy_manager_show_declined"), value = showDeclined:old() and 1 or 0,
 			onValueChange = function(value : integer)
@@ -758,8 +797,7 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 			end,
 		}
 	end
-	local message = notice:old()
-	local showNotice = (not autoDecline:old() or (message ~= nil and message.action == "configure" and message.reason == "unavailable")) and ((busy:old() and pendingArchiveRequest ~= nil and pendingArchiveRequest.action == "recover") or (not busy:old() and message ~= nil and (message.reason == "unavailable" or message.action == "recover" or (message.action == "review" and type(message.count) == "number" and (message.count as number) > 0))))
+	local showNotice = (not autoDecline:old() or (message ~= nil and message.action == "configure" and message.reason == "unavailable")) and ((busy:old() and pendingArchiveRequest ~= nil and pendingArchiveRequest.action == "recover") or (not busy:old() and message ~= nil and (message.reason == "unavailable" or message.action == "recover")))
 	local controls = builtin.BoxLayout {
 		meta = { class = "tf3-subsidy-controls" }, orientation = builtin.type.Orientation.Horizontal,
 		children = controlChildren,
@@ -770,8 +808,6 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 		if not busy:old() and message then
 			if message.action == "configure" and message.reason == "unavailable" then text = _("tf3_subsidy_manager_configuration_unavailable")
 			elseif message.reason == "unavailable" then text = _("tf3_subsidy_manager_recovery_unavailable")
-			elseif message.action == "review" then
-				text = string.format(_(message.count == 1 and "tf3_subsidy_manager_hidden_available_one" or "tf3_subsidy_manager_hidden_available"), message.count)
 			elseif message.success == true then text = _("tf3_subsidy_manager_recovered")
 			else text = _("tf3_subsidy_manager_recovery_expired") end
 		end
@@ -780,14 +816,6 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 			if message and message.reason == "unavailable" then feedback[#feedback + 1] = builtin.Button {
 				content = builtin.TextView { text = _("tf3_subsidy_manager_retry") },
 				onClick = function() request(message.action as string, message.key as string, message.action == "configure", message.enabled as boolean, message.review as boolean) end,
-			} end
-			if message and message.action == "review" and message.reason ~= "unavailable" then feedback[#feedback + 1] = builtin.Button {
-				content = builtin.TextView { text = _("tf3_subsidy_manager_review_offers") },
-				onClick = function()
-					selectedTab:set(2); showDeclined:set(true)
-					generation:set(generation:old() + 1)
-					acknowledgeArchive(message.sequence as number); notice:set(nil)
-				end,
 			} end
 			feedback[#feedback + 1] = builtin.Button {
 				content = builtin.TextView { text = _("tf3_subsidy_manager_dismiss") },

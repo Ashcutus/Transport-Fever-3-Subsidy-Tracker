@@ -333,7 +333,7 @@ print('PASS: main-thread saved-preference synchronization/configuration, future-
 local function findNode(node, predicate)
     if type(node) ~= 'table' then return nil end
     if predicate(node) then return node end
-    for _, key in ipairs({'children', 'layout', 'content'}) do
+    for _, key in ipairs({'children', 'layout', 'content', 'buttons'}) do
         local child = node[key]
         if type(child) == 'table' then
             if child.kind then
@@ -346,6 +346,9 @@ local function findNode(node, predicate)
 end
 local function feedback(tree)
     return findNode(tree, function(n) return n.meta and n.meta.class == 'tf3-subsidy-feedback' end)
+end
+local function offeredDot(tree)
+    return findNode(tree, function(n) return n.meta and n.meta.class == 'tf3-subsidy-offered-dot' end)
 end
 local function button(tree, text)
     return assert(findNode(tree, function(n) return n.kind == 'Button' and n.content and n.content.text == text end), text)
@@ -366,18 +369,30 @@ component.state.tf3SubsidyManagerArchive = {version = 1, entries = {
     {key = '4', record = expired, source = 'automatic', status = 'expired', reason = 'invalid_destination'},
 }, response = {sequence = 0}}
 local tree = render(windowRecipe, windowContext)
-assert(not feedback(tree), 'No recovery notice while suppression remains on')
+assert(not feedback(tree) and not offeredDot(tree), 'No recovery notice or Offered dot while suppression remains on')
 tree.content.children[1].children[3].onValueChange(0); loadEnabled = false
 assert(#archiveCommands == 1 and archiveCommands[1].action == 'configure' and archiveCommands[1].review, 'Disabling must request a simulation check')
 assert(not feedback(render(windowRecipe, windowContext)), 'Do not announce saved offers before the availability check completes')
 component.state.tf3SubsidyManagerArchive.response = {sequence = 1, action = 'configure', enabled = false, review = true, count = 2, success = true, requestId = archiveCommands[1].requestId}
+component.state.tf3SubsidyManagerArchive.notice = copy(component.state.tf3SubsidyManagerArchive.response)
 poll(); tree = render(windowRecipe, windowContext)
-assert(feedback(tree).children[1].text == 'tf3_subsidy_manager_hidden_available')
+assert(not feedback(tree) and offeredDot(tree).text == ' ●', 'Resume availability belongs on Offered, without a banner')
+local offeredButton = tree.content.children[1].children[1].buttons[2]
+assert(offeredButton.content.layout.children[1].text == 'tf3_subsidy_manager_offered (2)')
+assert(offeredButton.meta.tooltip == 'tf3_subsidy_manager_hidden_available')
 assert(#component.state.proposedSubventions == 0, 'Review must not recreate any offer')
-button(tree, 'tf3_subsidy_manager_review_offers').onClick()
+-- The unread Offered marker survives closing/reloading the manager.
+boot(); badge(); poll(); tree = render(windowRecipe, windowContext)
+assert(offeredDot(tree) and not feedback(tree))
+tree.content.children[1].children[1].onValueChange(2)
 tree = render(windowRecipe, windowContext)
-assert(not feedback(tree) and saved.archiveAcknowledged == 1 and saved.unrelated == 'keep')
+assert(not feedback(tree) and not offeredDot(tree) and saved.archiveAcknowledged == 1 and saved.unrelated == 'keep')
 local tableView = tableNode(tree)
+assert(#tableView.rowKeys == 2, 'Hidden offers appear automatically; manual declines remain filtered')
+assert(tableView.userParam.entries[1].outcome == 'hidden')
+tree.content.children[1].children[4].onValueChange(1)
+tree = render(windowRecipe, windowContext)
+tableView = tableNode(tree)
 assert(#tableView.rowKeys == 3 and #tableView.columns == 6)
 assert(tableView.columns[1].name == 'tf3_subsidy_manager_column_status')
 local actionColumn = tableView.columns[6]
@@ -390,7 +405,7 @@ assert(#archiveCommands == 2 and archiveCommands[2].action == 'recover' and arch
 assert(#tableNode(render(windowRecipe, windowContext)).rowKeys == 3)
 component.state.proposedSubventions = {copy(hidden1)}
 table.remove(component.state.tf3SubsidyManagerArchive.entries, 1)
-component.state.tf3SubsidyManagerArchive.response = {sequence = 2, action = 'recover', key = '1', success = true, requestId = archiveCommands[2].requestId}
+component.state.tf3SubsidyManagerArchive.response = {sequence = 3, action = 'recover', key = '1', success = true, requestId = archiveCommands[2].requestId}
 poll(); tree = render(windowRecipe, windowContext)
 assert(feedback(tree).children[1].text == 'tf3_subsidy_manager_recovered')
 local previousKey = tableView.meta.localKey
@@ -402,7 +417,7 @@ action.children[1].onClick()
 assert(archiveCommands[3].key == '2')
 component.state.tf3SubsidyManagerArchive.entries[1].status = 'expired'
 component.state.tf3SubsidyManagerArchive.entries[1].reason = 'invalid_destination'
-component.state.tf3SubsidyManagerArchive.response = {sequence = 3, action = 'recover', key = '2', success = false, reason = 'invalid_destination', requestId = archiveCommands[3].requestId}
+component.state.tf3SubsidyManagerArchive.response = {sequence = 4, action = 'recover', key = '2', success = false, reason = 'invalid_destination', requestId = archiveCommands[3].requestId}
 poll(); tree = render(windowRecipe, windowContext)
 assert(feedback(tree).children[1].text == 'tf3_subsidy_manager_recovery_expired')
 assert(#component.state.failedSubventions == 0)
@@ -429,19 +444,63 @@ for _ = 1, 4 do poll() end
 tree = render(windowRecipe, windowContext)
 assert(feedback(tree).children[1].text == 'tf3_subsidy_manager_configuration_unavailable')
 assert(component.state.tf3SubsidyManagerArchive.entries[2].status == 'saved')
-print('PASS: quiet suppression/no dot, review only when resuming flow, async confirmation, Show declined/status/recover, refreshed cells, expired History/reasons, persisted dismissal and bounded transient-error feedback')
+print('PASS: quiet suppression, confirmed Offered dot/count, automatic hidden rows, optional manual declines, recovery, refreshed cells, expired History and persisted review acknowledgement')
 
 -- A delayed response from an earlier request must not satisfy its retry.
 local staleId = archiveCommands[#archiveCommands].requestId
 button(tree, 'tf3_subsidy_manager_retry').onClick()
 local retried = archiveCommands[#archiveCommands]
 assert(retried.requestId ~= staleId)
-component.state.tf3SubsidyManagerArchive.response = {sequence = 100, action = 'configure', enabled = false, review = true, success = true, count = 2, requestId = staleId}
+component.state.tf3SubsidyManagerArchive.entries[#component.state.tf3SubsidyManagerArchive.entries + 1] = {key = '5', record = offer(106), source = 'automatic', status = 'saved'}
+component.state.tf3SubsidyManagerArchive.response = {sequence = 100, action = 'configure', enabled = false, review = true, success = true, count = 1, requestId = staleId}
 poll()
 assert(not feedback(render(windowRecipe, windowContext)), 'Stale reply must leave the retry pending')
 component.state.tf3SubsidyManagerArchive.response.requestId = retried.requestId
 poll()
-assert(feedback(render(windowRecipe, windowContext)).children[1].text == 'tf3_subsidy_manager_hidden_available')
+assert(offeredDot(render(windowRecipe, windowContext)) and not feedback(render(windowRecipe, windowContext)))
+
+-- Reviewing while Offered is already selected needs no reminder. A later
+-- zero-count review must neither show a banner nor leave a misleading dot.
+tree = render(windowRecipe, windowContext)
+tree.content.children[1].children[1].onValueChange(2)
+loadEnabled = false
+toggle(true)
+assert(not offeredDot(render(windowRecipe, windowContext)))
+toggle(false)
+tree = render(windowRecipe, windowContext)
+assert(not offeredDot(tree) and not feedback(tree))
+assert(saved.archiveAcknowledged == component.state.tf3SubsidyManagerArchive.response.sequence)
+assert(#tableNode(tree).rowKeys == #component.state.proposedSubventions + 1, 'Available and hidden offers are visible without Show declined')
+
+-- A reply must not mark the review seen when the Offered snapshot cannot load.
+toggle(true)
+tree = render(windowRecipe, windowContext)
+tree.content.children[1].children[3].onValueChange(0); loadEnabled = false
+component.state.tf3SubsidyManagerArchive.response.count = 1
+component.state.failedSubventions = 'unreadable'
+local reviewSequence = component.state.tf3SubsidyManagerArchive.response.sequence
+poll(); tree = render(windowRecipe, windowContext)
+assert(saved.archiveAcknowledged < reviewSequence and not offeredDot(tree))
+component.state.failedSubventions = {}
+tree.content.children[1].children[2].onClick()
+assert(saved.archiveAcknowledged == reviewSequence and not offeredDot(render(windowRecipe, windowContext)))
+
+-- An older unread review must stay quiet after re-enabling suppression/reload.
+reset({}, {autoDecline = {version = 1, enabled = true, offers = {}}})
+component.state.tf3SubsidyManagerArchive = {version = 1, entries = {
+    {key = '1', record = offer(200), source = 'automatic', status = 'saved'},
+}, automatic = {enabled = true}, response = {sequence = 10},
+notice = {sequence = 9, action = 'configure', enabled = false, review = true, success = true, count = 1}}
+badge(); poll(); tree = render(windowRecipe, windowContext)
+assert(not offeredDot(tree) and not feedback(tree))
+assert(tree.content.children[1].children[1].buttons[2].content.text == 'tf3_subsidy_manager_offered (0)')
+
+-- No hidden offers means no dot, even with an old positive review response.
+component.state.tf3SubsidyManagerArchive.entries = {}
+saved.autoDecline.enabled = false
+component.state.tf3SubsidyManagerArchive.automatic.enabled = false
+boot(); badge(); poll(); tree = render(windowRecipe, windowContext)
+assert(not offeredDot(tree) and not feedback(tree))
 
 -- Saved simulation configuration wins over stale GUI preferences on reload.
 reset({}, {autoDecline = {version = 1, enabled = false, offers = {}}})

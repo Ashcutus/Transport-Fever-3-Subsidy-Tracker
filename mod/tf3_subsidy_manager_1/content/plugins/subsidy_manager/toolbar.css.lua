@@ -27,6 +27,7 @@ function data()
     a("#tf3-subsidy-manager.window!tf3-subsidy-empty !tf3-subsidy-data-region", { size = { -1, 110 } })
     -- Match native statistics: padding belongs to the Window content widget.
     a("#tf3-subsidy-manager.window Window::Content", { padding = { 16, 12, 16, 12 } })
+    a("#tf3-subsidy-manager.window !tf3-subsidy-offered-dot", { color = { 1, 0.8, 0.2, 1 }, gravity = { -1, 0.5 } })
     a("!tf3-subsidy-content", { gravity = { -1, -1 }, innerSpacing = { 0, 12 } })
     a("!tf3-subsidy-controls", { innerSpacing = { 16, 0 } })
     a("!tf3-subsidy-data-region", { size = { -1, 490 }, gravity = { -1, -1 } })

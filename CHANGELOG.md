@@ -4,8 +4,8 @@
 
 - Auto-decline saves and declines new offers before they reach the offer notification flow, after the game confirms the option. Previously hidden offers do not set the manager’s toolbar dot.
 - Added confirmation and retry guidance when changing Auto-decline.
-- When you switch Auto-decline off, the manager checks saved offers and tells you how many previously hidden subsidies are still available. Choose **Review offers** to see them.
-- **Show declined** in Offered includes saved automatic and manual declines. Choose **Recover** to restore the original contract, then use the game’s normal Accept or Decline controls.
+- When you switch Auto-decline off, previously hidden offers appear directly in Offered and its count. A yellow dot marks offers waiting for review, with the available count on hover. Opening Offered clears the dot.
+- **Show declined** adds manual declines to Offered. Choose **Recover** on a saved offer to restore the original contract, then use the game’s normal Accept or Decline controls.
 - Saved contracts keep their requirements, rewards and remaining offer time. Their offer timer pauses while saved; accepted-task deadlines are unchanged.
 - Contracts that cannot be recovered appear in History as **Expired — could not recover**, with an explanation and no failure penalty. Temporary read errors keep the saved offer available for another attempt.
 - Recovery supports the four vanilla subsidy types and offers saved from this version onward. Older declines cannot be recovered.
