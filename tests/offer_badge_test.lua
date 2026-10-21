@@ -43,21 +43,28 @@ local function flushJoins()
         for _, fn in ipairs(batch) do fn() end
     end
 end
-local badgeContext, windowContext, activeContext
-local badgeRecipe, windowRecipe, toolbar, replacements, builtin, react
+local badgeContext, iconContext, windowContext, activeContext
+local badgeRecipe, iconRecipe, windowRecipe, toolbar, replacements, builtin, react
 local function boot()
-    badgeContext, windowContext, replacements = context(), context(), {}
+    badgeContext, iconContext, windowContext, replacements = context(), context(), context(), {}
     builtin = {type = {Orientation = {Horizontal = 1, Vertical = 2}, ImageViewScaling = {AutoFit = 1},
         FloatingLayoutOverflowMode = {Overflow = 1}, ScrollBarPolicy = {AlwaysOff = 1, AsNeededButAlwaysReserveSpace = 2}}}
     for _, name in ipairs({"Component", "FloatingLayout", "FloatingLayoutChild", "BoxLayout", "ImageView", "TextView",
-        "Window", "ScrollArea", "Button", "ToolButton", "ToggleButtonGroup", "CheckBox", "ColumnDesc", "DataTable"}) do
+        "Window", "ScrollArea", "Button", "ToolButton", "ToolStack", "ToggleButtonGroup", "CheckBox", "ColumnDesc", "DataTable"}) do
         builtin[name] = function(...) local args = {...}; local node = args[#args]; node.kind = name; return node end
     end
     react = {}
-    function react.RegisterRecipe(_, fn) return fn end
+    function react.RegisterRecipe(name, fn)
+        if name == "TF3SubsidyManagerController" then
+            badgeRecipe = fn
+            return function() return {kind = "ControllerRecipe"} end
+        end
+        return fn
+    end
+    function react.RegisterPluginRecipe(extension, _, fn) assert(extension.id == "::MainModButtonAreaExtension"); return fn end
     function react.RegisterWrapperRecipe(name, wrapped, fn)
         if name == "TF3SubsidyManagerOfferBadgeIcon" then
-            assert(wrapped == builtin.Component); badgeRecipe = fn
+            assert(wrapped == builtin.Component); iconRecipe = fn
             return function(params) return {kind = "BadgeRecipe", params = params} end
         end
         if name == "TF3SubsidyManagerWindow" then assert(wrapped == builtin.Window); windowRecipe = fn end
@@ -94,6 +101,8 @@ local function boot()
         if name == 'selectViewKey' then detailEvents[#detailEvents + 1] = copy(data) end
         local listener = badgeContext.events[name]
         if listener then listener(name, data) end
+        local iconListener = iconContext.events[name]
+        if iconListener then iconListener(name, data) end
         local windowListener = windowContext.events[name]
         if windowListener then windowListener(name, data) end
     end
@@ -172,7 +181,8 @@ local function boot()
             if path:find("engine_react_util", 1, true) then return engineReact end
             if path:find("/main/react.lua", 1, true) then return react end
             if path:find("/main/builtin.lua", 1, true) then return builtin end
-            if path:find("/game_bar/game_bar.tl", 1, true) then return gameBar end
+            if path:find("/game_bar/game_bar.tl", 1, true) then error("No GameBar dependency allowed") end
+            if path:find("main_mod_button_area.tl", 1, true) then return {MainModButtonAreaExtension = {id = "::MainModButtonAreaExtension"}} end
             if path:find("tool_react_util", 1, true) then
                 return {registerToolWithWindow = function(name, _, recipe) return {name = name, recipe = recipe} end}
             end
@@ -190,10 +200,11 @@ local function boot()
     }, {__index = _G})
     local exports = assert(load(generated, "subsidy-manager", "t", env))()
     exports.installToolbar({ReplaceRecipe = function(original, replacement) replacements[original] = replacement end})
-    local gameCtx = {toolStack = {get = function() return {getApi = function()
+    local gameCtx = {windowContainer = {}, toolStack = {get = function() return {getApi = function()
         return {push = function() error("Window failed to open") end, pop = function() end}
     end} end}}
-    replacements[gameBar.GameBar]({gameCtx = gameCtx})
+    assert(next(replacements) == nil)
+    builtin.ToolStack({defaultToolParam = {gameCtx = gameCtx}})
     local neighbour = {meta = {id = "menu.industry-statistics.button"}, toolStack = gameCtx.toolStack}
     local pair = builtin.ToolButton({}, neighbour)
     assert(pair.children[1] == neighbour and #pair.children == 2)
@@ -207,7 +218,9 @@ local function render(recipe, ctx)
     local node = recipe({}); flushJoins(); return node
 end
 local function badge()
-    local node = render(badgeRecipe, badgeContext)
+    render(badgeRecipe, badgeContext)
+    local node = render(iconRecipe, iconContext)
+    assert(next(iconContext.timers) == nil, "Icon must not own a second polling timer")
     assert(node.kind == "Component" and node.mouseTransparent)
     assert(node.layout.kind == "FloatingLayout")
     local children = node.layout.children
@@ -722,3 +735,24 @@ badgeContext.events.tf3SubsidyManagerArchiveReply('tf3SubsidyManagerArchiveReply
 assert(not badge() and not saved.offerBadge.pending, 'Never raise a missed-offer reminder while suppression is enabled')
 print('PASS: toolbar dot for confirmed revealed offers, quiet zero/failed/sync replies, valid counts and persistence retries')
 print('PASS: stale acknowledgement rejection, authoritative saved simulation mode and expired-toolbar join cancellation')
+
+-- No toolbar icon is ever mounted: the native Mods controller still owns the
+-- configuration/recovery bridge and acknowledgements, with one timer only.
+reset({}, {autoDecline = {version = 1, enabled = true, offers = {}}})
+render(badgeRecipe, badgeContext)
+assert(next(iconContext.events) == nil and next(iconContext.timers) == nil)
+local function pollWithoutIcon()
+    restricted = true
+    local ok, err = pcall(assert(badgeContext.timers[1]).tick)
+    restricted = false
+    assert(ok, err); assert(#forbidden == 0)
+    flushJoins(); render(badgeRecipe, badgeContext)
+end
+pollWithoutIcon()
+badgeContext.events.tf3SubsidyManagerAutoDecline('tf3SubsidyManagerAutoDecline', false)
+pollWithoutIcon()
+assert(saved.autoDecline.enabled == false and component.state.tf3SubsidyManagerArchive.automatic.enabled == false)
+assert(not next(iconContext.events), 'Test accidentally mounted the toolbar icon')
+badgeContext.events.tf3SubsidyManagerArchiveRequest('tf3SubsidyManagerArchiveRequest', {action = 'recover', key = 'saved-offer', sequence = component.state.tf3SubsidyManagerArchive.response.sequence})
+assert(archiveCommands[#archiveCommands].action == 'recover' and archiveCommands[#archiveCommands].key == 'saved-offer')
+print('PASS: native Mods controller configures and requests recovery without a toolbar icon or duplicate timer')

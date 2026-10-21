@@ -3,7 +3,7 @@ local tealDir = assert(os.getenv("TEAL_DIR"), "Set TEAL_DIR to a Teal checkout")
 package.path = tealDir .. "/?.lua;" .. tealDir .. "/?/init.lua;" .. package.path
 local ok, tl = pcall(require, "teal.api.v2")
 if not ok then tl = require("tl") end
-local file = assert(io.open("mod/tf3_subsidy_manager_1/content/plugins/subsidy_manager/main.script.tl"))
+local file = assert(io.open(os.getenv("TF3_MANAGER_SOURCE") or "mod/tf3_subsidy_manager_1/content/plugins/subsidy_manager/main.script.tl"))
 local generated, result = tl.gen(file:read("*a"))
 file:close()
 assert(#result.syntax_errors == 0, "Teal syntax errors")
@@ -26,12 +26,17 @@ local windowRecipe, managerTool
 local events, replacements = {}, {}
 local gameBar = { GameBar = function(params) return {kind = "GameBar", params = params} end }
 local react = {}
-function react.RegisterRecipe(_, fn)
+function react.RegisterRecipe(name, fn)
+    if name == "TF3SubsidyManagerController" then return function() return {kind = "BoxLayout", children = {}} end end
     return function(...)
         local node = fn(...)
         assert(node.kind == "BoxLayout" or node.kind == "FloatingLayout", "Recipe child must be a layout")
         return node
     end
+end
+function react.RegisterPluginRecipe(extension, name, fn)
+    assert(extension.id == "::MainModButtonAreaExtension")
+    return react.RegisterRecipe(name, fn)
 end
 function react.CallOriginalRecipe(fn, params) return fn(params) end
 function react.onEvent(_) end -- Recovery events are exercised by recovery integration tests.
@@ -59,7 +64,7 @@ function react.useStateLazy(fn)
 end
 function react.useState(value) return react.useStateLazy(function() return value end) end
 local builtin = {type = {Orientation = {Vertical = 1, Horizontal = 2}, ImageViewScaling = {AutoFit = 1}, ScrollBarPolicy = {AlwaysOff = 1, AsNeededButAlwaysReserveSpace = 2}}}
-for _, name in ipairs({"TextView", "BoxLayout", "Button", "ImageView", "Window", "ProgressBar", "ToolButton", "ScrollArea", "Component", "ToggleButtonGroup", "CheckBox", "ColumnDesc", "DataTable"}) do
+for _, name in ipairs({"TextView", "BoxLayout", "Button", "ImageView", "Window", "ProgressBar", "ToolButton", "ToolStack", "ScrollArea", "Component", "ToggleButtonGroup", "CheckBox", "ColumnDesc", "DataTable"}) do
     builtin[name] = function(...) local args = {...}; local params = args[#args]; params.kind = name
         if name == "ProgressBar" then
             assert(params.text == nil and type(params.label) == "string", "Native ProgressBar uses label, not text")
@@ -148,7 +153,8 @@ local env = setmetatable({api = api, _ = translate,
     log = {warning = function(message) warnings[#warnings + 1] = message end},
     ug_require = function(path)
         if path:find("tool_react_util", 1, true) then return toolUtil end
-        if path:find("game_bar.tl", 1, true) then return gameBar end
+        if path:find("game_bar.tl", 1, true) then error("Launcher must not load/replace GameBar") end
+        if path:find("main_mod_button_area.tl", 1, true) then return {MainModButtonAreaExtension = {id = "::MainModButtonAreaExtension"}} end
         if path:find("lang_util.tl", 1, true) then return {formatInt = tostring} end
         if path:find("/scripts/util.tl", 1, true) then return util end
         if path:find("react.lua", 1, true) then return react end
@@ -304,6 +310,12 @@ assert(not texts(content(render()).children[1]):find("Native duration:", 1, true
 assert(not texts(content(render()).children[1]):find("9 Months", 1, true))
 
 -- Bootstrap installs once; unrelated buttons and refs pass through unchanged.
+local oldToolStack = builtin.ToolStack
+local stackCalls = {}
+builtin.ToolStack = function(...)
+    stackCalls[#stackCalls + 1] = {...}
+    return oldToolStack(...)
+end
 local oldToolButton = builtin.ToolButton
 local toolCalls = {}
 builtin.ToolButton = function(...)
@@ -315,7 +327,7 @@ exports.installToolbar(replacementApi)
 local hooked = builtin.ToolButton
 exports.installToolbar(replacementApi)
 assert(builtin.ToolButton == hooked)
-assert(replacements[gameBar.GameBar])
+assert(next(replacements) == nil, "Launcher must leave global recipe replacements alone")
 local toolStack
 toolStack = {push = function(tool, _, params)
     assert(tool == managerTool)
@@ -325,8 +337,22 @@ toolStack = {push = function(tool, _, params)
     mounted, visible = true, true
 end}
 function toolStack.pop(tool) assert(tool == managerTool); mounted, visible = false, false end
-local gameCtx = {toolStack = {get = function() return {getApi = function() return toolStack end} end}}
-replacements[gameBar.GameBar]({gameCtx = gameCtx})
+local gameCtx = {toolStack = {get = function() return {getApi = function() return toolStack end} end}, windowContainer = {}}
+local stackRef, stackStyle = {}, {}
+local stackParams = {defaultToolParam = {gameCtx = gameCtx}, defaultToolKey = "__pinned__"}
+assert(builtin.ToolStack(stackRef, stackStyle, stackParams) == stackParams)
+assert(stackCalls[#stackCalls][1] == stackRef and stackCalls[#stackCalls][2] == stackStyle
+    and stackCalls[#stackCalls][3] == stackParams, "Native ToolStack refs/styles/params changed")
+-- The official launcher opens without a GameBar or Industry Statistics call.
+local fallback = exports.ModsLauncher({}).children[2]
+assert(fallback.meta.id == "tf3-subsidy-manager.mods-button")
+fallback.onClick(); assert(visible and added == 1)
+tree.onClose(); assert(not mounted)
+added = 0
+-- Auxiliary/malformed tool stacks must not erase the real context.
+for _, params in ipairs({{}, {defaultToolParam = false}, {defaultToolParam = {}}, {defaultToolParam = {gameCtx = {}}}}) do
+    assert(builtin.ToolStack(params) == params)
+end
 local unrelated = {meta = {id = "menu.fileMenu"}}
 assert(builtin.ToolButton(unrelated) == unrelated)
 assert(builtin.ToolButton({}, {}, unrelated) == unrelated)
@@ -334,7 +360,9 @@ assert(builtin.ToolButton({}, {}, {}, unrelated) == unrelated)
 local ref = {}
 local industry = {meta = {id = "menu.industry-statistics.button"}, toolStack = gameCtx.toolStack}
 local pair = builtin.ToolButton(ref, industry)
-assert(toolCalls[#toolCalls - 1][1] == ref and toolCalls[#toolCalls - 1][2] == industry)
+local foreign = {meta = {id = "menu.industry-statistics.button"}, toolStack = {}}
+assert(builtin.ToolButton(foreign) == foreign, "Do not bind another tool stack to the captured game")
+assert(toolCalls[#toolCalls - 2][1] == ref and toolCalls[#toolCalls - 2][2] == industry)
 assert(pair.children[1] == industry, "native industry button replaced")
 local button = pair.children[2]
 assert(button.meta.tooltip == "tf3_subsidy_manager_button_tooltip")

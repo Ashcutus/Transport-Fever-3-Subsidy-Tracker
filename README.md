@@ -31,7 +31,7 @@ Recovery covers TF3’s four vanilla subsidy types. It can only recover offers s
 
 Once your save is loaded:
 
-1. Click the **contract icon** in the bottom-right toolbar, beside Industry Statistics.
+1. Click the **contract icon** in the bottom-right toolbar, beside Industry Statistics. You can also click **Subsidy Manager** in the game’s native Mods area beside Layers, including when the bottom-bar icon is unavailable.
 2. Choose **Offered** for new contracts, **In Progress** for accepted tasks, or **History** for past outcomes.
 3. Click a subsidy to open its details. The game's usual controls handle acceptance and decline.
 4. When Auto-decline is off, hidden offers appear directly in **Offered**. Enable **Show declined** to include manual declines. Click a subsidy to open its usual details and choose Accept or Decline.
@@ -76,6 +76,10 @@ Each section has its own guidance, with a compact window when the entire overvie
 
 </details>
 
+## What's new in v1.3.1
+
+An additional launcher in the game’s native Mods area keeps the manager accessible when the bottom-bar icon is unavailable. Auto-decline and saved-offer actions remain available through the additional launcher. Compatibility with the reported stutter-fix mod and rendering at smaller UI scales still need in-game verification.
+
 ## What's new in v1.3.0
 
 Quietly save hidden offers, review them when you resume the subsidy flow, and recover original contracts if you change your mind. Offered can include saved manual declines, and History explains unsuccessful recoveries. See the [changelog](CHANGELOG.md) for the release history.
@@ -96,7 +100,7 @@ Clearer History with one status per outcome, explanatory tooltips for missing va
 - **Some fields may be unavailable.** Open the game's detail window for the full task information.
 - **English is currently the supplied language.**
 
-Real-save testing on Linux covers the In Progress and History tables and all three compact empty views. The updated captures show Auto-decline guidance and the missed-offer count and yellow Offered dot. Accepted-task progress and its native notification continued during suppression in the maintainer's test. Recovery and toolbar-dot testing are still in progress. Gameplay testing on Windows, macOS, Xbox and PlayStation has not been performed. Mods that change the same toolbar or subsidy interface may conflict.
+Real-save testing on Linux covers the In Progress and History tables and all three compact empty views. The updated captures show Auto-decline guidance and the missed-offer count and yellow Offered dot. Accepted-task progress and its native notification continued during suppression in the maintainer's test. The maintainer also reported a multi-hour run with 33 offers visible after resuming the subsidy flow. The new Mods-area launcher and revised initialization still need real-game verification. Gameplay testing on Windows, macOS, Xbox and PlayStation has not been performed. Mods that change the same toolbar or subsidy interface may conflict.
 
 ## Feedback
 

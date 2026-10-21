@@ -2,7 +2,7 @@ local react = ug_require "::/gui/main/react.lua" as React
 local builtin = ug_require "::/gui/main/builtin.lua" as Builtin
 local util = ug_require "::/scripts/util.tl" as Util
 local toolUtil = ug_require "::/gui/main/tool_react_util.tl" as ToolReactUtil
-local gameBar = ug_require "::/gui/game_bar/game_bar.tl" as GameBar
+local modButtonArea = ug_require "::/gui/main/main_mod_button_area.tl" as MainModButtonArea
 local engineReactUtil = ug_require "::/gui/main/engine_react_util.tl" as EngineReactUtil
 
 local WINDOW_ID = "tf3-subsidy-manager.window"
@@ -15,6 +15,8 @@ local OFFERS_OPENED_EVENT = "tf3SubsidyManagerOffersOpened"
 local ARCHIVE_REQUEST_EVENT = "tf3SubsidyManagerArchiveRequest"
 local ARCHIVE_REPLY_EVENT = "tf3SubsidyManagerArchiveReply"
 local ARCHIVE_RECOVER_EVENT = "tf3SubsidyManagerArchiveRecover"
+local BADGE_CHANGED_EVENT = "tf3SubsidyManagerBadgeChanged"
+local currentBadgePending = false
 local pendingArchiveRequest : {any : any} = nil
 local archiveRequestSession = tostring({})
 local archiveRequestSerial = 0
@@ -162,10 +164,16 @@ local function saveAutoDecline(setting : AutoDeclineState) : boolean
 	end)
 end
 
-local OfferBadgeIcon = react.RegisterWrapperRecipe("TF3SubsidyManagerOfferBadgeIcon", builtin.Component, function(_params : Builtin.ComponentParam) : TreeNodeId
+local ManagerController = react.RegisterRecipe("TF3SubsidyManagerController", function() : TreeNodeId
 	local tracked : ReactRefT<OfferBadgeState> = react.useRefLazy(loadOfferBadge)
 	local automatic : ReactRefT<AutoDeclineState> = react.useRefLazy(loadAutoDecline)
 	local synchronized : ReactRefT<boolean> = react.useRef(false)
+	currentBadgePending = tracked:get().pending
+	local function publishPending(value : boolean)
+		currentBadgePending = value
+		react.fireEvent(nil, BADGE_CHANGED_EVENT, value)
+	end
+	react.onMount(function() publishPending(tracked:get().pending) end)
 	local pending : ReactStateT<boolean>
 	pending = engineReactUtil.useStepStateTimer(function() : boolean
 		-- Native timer callbacks execute in the restricted deferred-read phase.
@@ -203,6 +211,7 @@ local OfferBadgeIcon = react.RegisterWrapperRecipe("TF3SubsidyManagerOfferBadgeI
 			badge.initialized, badge.offers = true, offers
 			if changed or badge.dirty then badge.dirty = not saveOfferBadge(badge) end
 			pending:set(badge.pending)
+			publishPending(badge.pending)
 		end, "TF3SubsidyManager:offerRead")
 		return tracked:get().pending
 	end, 5)
@@ -235,6 +244,7 @@ local OfferBadgeIcon = react.RegisterWrapperRecipe("TF3SubsidyManagerOfferBadgeI
 			badge.dirty = not saveOfferBadge(badge)
 		end
 		pending:set(true)
+		publishPending(true)
 	end)
 	react.onEvent(OFFERS_OPENED_EVENT, function(_name : string, data : any)
 		if type(data) ~= "table" then return end
@@ -247,6 +257,16 @@ local OfferBadgeIcon = react.RegisterWrapperRecipe("TF3SubsidyManagerOfferBadgeI
 		badge.initialized, badge.offers, badge.pending = true, offers, false
 		badge.dirty = not saveOfferBadge(badge)
 		pending:set(false)
+		publishPending(false)
+	end)
+	return builtin.BoxLayout { children = {} }
+end)
+
+-- Views only: one controller in the native Mods area owns all synchronization.
+local OfferBadgeIcon = react.RegisterWrapperRecipe("TF3SubsidyManagerOfferBadgeIcon", builtin.Component, function(_params : Builtin.ComponentParam) : TreeNodeId
+	local pending : ReactStateT<boolean> = react.useState(currentBadgePending)
+	react.onEvent(BADGE_CHANGED_EVENT, function(_name : string, value : any)
+		if type(value) == "boolean" then pending:set(value as boolean) end
 	end)
 	local children : {TreeNodeId} = {
 		builtin.FloatingLayoutChild { item = builtin.ImageView { path = "tf3_subsidy_manager::/plugins/subsidy_manager/icons/contract_26.tga" } },
@@ -899,9 +919,37 @@ end)
 -- Native tools remove their windows on pop and shelve them under the pause menu.
 local ManagerTool = toolUtil.registerToolWithWindow("TF3SubsidyManager", WINDOW_ID, SubsidyManagerWindow)
 
--- No tray extension is shipped. The bootstrap callback wraps only creation of the
--- Industry ToolButton; all native calls/refs are forwarded unchanged. This is an
--- undocumented module hook, deliberately guarded and installed only once.
+-- Capture the real context from the root native ToolStack's default tool params.
+-- No GameBar recipe replacement is needed; all native calls/refs pass through.
+local launcherContext : GameContext = nil
+local contextWarningShown = false
+
+local function openManager(gameCtx : GameContext)
+	if not gameCtx then
+		if not contextWarningShown then
+			log.warning("[Subsidy Manager] Launcher is waiting for the native game tool stack.")
+			contextWarningShown = true
+		end
+		return
+	end
+	gameCtx.toolStack:get():getApi().push(ManagerTool, nil, { gameCtx = gameCtx }, true)
+end
+
+-- The official Mods-area extension remains reachable when the statistics tray
+-- is hidden/replaced. Its controller owns the single existing five-second timer.
+local ModsLauncher = react.RegisterPluginRecipe(modButtonArea.MainModButtonAreaExtension, "TF3SubsidyManagerModsLauncher", function() : TreeNodeId
+	return builtin.BoxLayout {
+		children = {
+			ManagerController {},
+			builtin.Button {
+				meta = { id = "tf3-subsidy-manager.mods-button", tooltip = _("tf3_subsidy_manager_button_tooltip") },
+				content = builtin.TextView { text = _("tf3_subsidy_manager_title") },
+				onClick = function() openManager(launcherContext) end,
+			},
+		},
+	}
+end)
+
 local record ToolbarParams
 	meta : Meta
 	toolStack : ReactRefWrapApiT<Builtin.ToolStackParam, Builtin.ToolStackAPI>
@@ -912,25 +960,37 @@ local function installToolbar(_replacementApi : ReactReplacementApi)
 	if installed then return end
 	installed = true
 	local originalToolButton = builtin.ToolButton
-	local currentGameCtx : GameContext = nil
-	local originalGameBar = gameBar.GameBar
-	-- CallOriginalRecipe creates a GameBar recipe node, not its layout.
-	-- Register the delegation as a wrapper so the native transform can unwrap it.
-	local WithContext = react.RegisterWrapperRecipe("TF3SubsidyManagerGameBar", originalGameBar, function(params : GameBar.GameBarParam) : TreeNodeId
-		currentGameCtx = params.gameCtx
-		return react.CallOriginalRecipe(originalGameBar, params)
-	end)
-	_replacementApi.ReplaceRecipe(originalGameBar, WithContext)
-
-	-- Recipe calls support both (params) and (ref, params).
+	local originalToolStack = builtin.ToolStack
 	local builtinTable = builtin as table
+	builtinTable.ToolStack = function(... : any) : TreeNodeId
+		local args : {any} = {...}
+		local params = args[#args] as Builtin.ToolStackParam
+		if type(params) == "table" and type(params.defaultToolParam) == "table" then
+			local gameCtx = (params.defaultToolParam as table).gameCtx as GameContext
+			if type(gameCtx) == "table" and gameCtx.toolStack and gameCtx.windowContainer then
+				launcherContext = gameCtx
+				contextWarningShown = false
+			end
+		end
+		local originalCall = originalToolStack as function(... : any) : TreeNodeId
+		return originalCall(...)
+	end
+
+	-- Recipe calls can carry refs and styles. Forward every argument unchanged.
 	builtinTable.ToolButton = function(... : any) : TreeNodeId
 		local args : {any} = {...}
 		local params = args[#args] as ToolbarParams
 		local originalCall = originalToolButton as function(... : any) : TreeNodeId
 		local node = originalCall(...)
-		if type(params) ~= "table" or not params.meta or params.meta.id ~= "menu.industry-statistics.button" or not currentGameCtx then return node end
-		local gameCtx = currentGameCtx
+		if type(params) ~= "table" or not params.meta or params.meta.id ~= "menu.industry-statistics.button" then return node end
+		local gameCtx = launcherContext
+		if not gameCtx or params.toolStack ~= gameCtx.toolStack then
+			if not contextWarningShown then
+				log.warning("[Subsidy Manager] Toolbar launcher could not find its native game context; use the Mods-area launcher after loading.")
+				contextWarningShown = true
+			end
+			return node
+		end
 		return builtin.BoxLayout {
 			meta = { class = "tf3-subsidy-tray-pair" },
 			orientation = builtin.type.Orientation.Horizontal,
@@ -946,9 +1006,7 @@ local function installToolbar(_replacementApi : ReactReplacementApi)
 					toolDefinition = ManagerTool,
 					toolStack = params.toolStack,
 					content = OfferBadgeIcon {},
-					showFn = function()
-						gameCtx.toolStack:get():getApi().push(ManagerTool, nil, { gameCtx = gameCtx }, true)
-					end,
+					showFn = function() openManager(gameCtx) end,
 					hideFn = function()
 						gameCtx.toolStack:get():getApi().pop(ManagerTool, nil)
 					end,
@@ -958,4 +1016,4 @@ local function installToolbar(_replacementApi : ReactReplacementApi)
 	end
 end
 
-return { installToolbar = installToolbar }
+return { installToolbar = installToolbar, ModsLauncher = ModsLauncher }

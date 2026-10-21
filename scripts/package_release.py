@@ -18,6 +18,7 @@ RUNTIME_FILES = (
     "content/plugins/subsidy_manager/setup.script.lua",
     "content/plugins/subsidy_manager/recovery.script.lua",
     "content/plugins/subsidy_manager/toolbar.res.lua",
+    "content/plugins/subsidy_manager/launcher.res.lua",
     "content/plugins/subsidy_manager/toolbar.css.lua",
     "content/plugins/subsidy_manager/icons/contract_26@2x.tga",
     "content/plugins/subsidy_manager/icons/empty_contract_64@2x.tga",
