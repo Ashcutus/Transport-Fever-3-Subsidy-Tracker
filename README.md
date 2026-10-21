@@ -15,9 +15,9 @@ Compare offers, follow the tasks you've accepted, and see how your subsidies tur
 - **Review your results.** History brings together successful and failed subsidies while the game retains them.
 - **Know when something new arrives.** A small dot on the toolbar icon marks new offers since you last opened the manager.
 
-Prefer to skip future offers? Enable **Auto-decline** in the manager. It is off by default, applies only to offers arriving after you enable it, and saves your choice for this game. Existing offers, previously revealed missed offers and accepted tasks are left alone. New offers are saved and declined in the simulation before they become available to the game’s offer notifications, without setting the manager’s toolbar dot. The option takes effect when the game confirms the change. While a subsidy action is finishing, the setting stays readable and shows **please wait**; hover for the reason.
+Prefer to hide new offers? Enable **Hide offers** in the manager. It is off by default, applies only to offers arriving after you enable it, and saves your choice for this game. Existing offers, previously revealed missed offers and accepted tasks are left alone. New offers are saved and hidden before they reach the game’s offer notifications, without setting the manager’s toolbar dot. The option takes effect when the game confirms the change. While a subsidy action is finishing, the setting stays readable and shows **please wait**; hover for the reason.
 
-When you switch Auto-decline off, the manager refreshes the overview automatically, checks saved offers and includes previously hidden contracts directly in **Offered**, with its count updated. The **yellow dot on the toolbar icon** also lights when missed offers become available; opening the manager clears it. A **yellow dot on Offered** marks hidden offers waiting for review; hover to see how many are still available. Opening Offered clears the dot. Use **Show declined** to include manual declines too. Click an offer to open the game’s usual details, then choose Accept or Decline as normal.
+When you switch Hide offers off, the manager refreshes the overview automatically, checks saved offers and includes previously hidden contracts directly in **Offered**, with its count updated. The **yellow dot on the toolbar icon** also lights when missed offers become available; opening the manager clears it. A **yellow dot on Offered** marks hidden offers waiting for review; hover to see how many are still available. Opening Offered clears the dot. Use **Show declined** to include manual declines too. Click an offer to open the game’s usual details, then choose Accept or Decline as normal.
 
 Recovery keeps the original requirements and rewards. The remaining offer timer pauses while a contract is saved and resumes when recovered; the deadline for an accepted task is unchanged. Saved offers belong to this save. An offer that is no longer valid appears in History as **Expired**, with a reason and no task-failure penalty. Temporary read errors leave it saved and offer **Try again**.
 
@@ -34,14 +34,14 @@ Once your save is loaded:
 1. Click the **contract icon** in the bottom-right toolbar, beside Industry Statistics.
 2. Choose **Offered** for new contracts, **In Progress** for accepted tasks, or **History** for past outcomes.
 3. Click a subsidy to open its details. The game's usual controls handle acceptance and decline.
-4. When Auto-decline is off, hidden offers appear directly in **Offered**. Enable **Show declined** to include manual declines. Click a subsidy to open its usual details and choose Accept or Decline.
+4. When Hide offers is off, hidden offers appear directly in **Offered**. Enable **Show declined** to include manual declines. Click a subsidy to open its usual details and choose Accept or Decline.
 5. Press **Refresh** whenever you want to bring the overview up to date, including after accepting a subsidy while paused.
 
 You can move and pin the window. When there are no subsidies in any section, it uses a compact layout with a friendly hint. There is no default keyboard shortcut.
 
 ## Screenshot gallery
 
-The gallery below uses real game captures. The cover above is promotional artwork.
+The gallery below uses real game captures. Some show the previous **Auto-decline** label; the setting is now **Hide offers**. The cover above is promotional artwork.
 
 ### Your subsidies, one click away
 
@@ -49,11 +49,11 @@ The gallery below uses real game captures. The cover above is promotional artwor
 
 ### Skip new offers when you want to
 
-![Auto-decline tooltip explains that turning it off reveals missed subsidies that are still available](docs/screenshots/auto-decline.png)
+![The earlier Auto-decline tooltip explains that turning it off reveals missed subsidies that are still available](docs/screenshots/auto-decline.png)
 
 ### Pick up the opportunities you missed
 
-![Auto-decline off, with a yellow Offered dot and a tooltip reporting two previously hidden subsidies still available](docs/screenshots/missed-offers.png)
+![The earlier Auto-decline setting off, with a yellow Offered dot and a tooltip reporting two previously hidden subsidies still available](docs/screenshots/missed-offers.png)
 
 ### Keep your next move in view
 
@@ -78,7 +78,7 @@ Each section has its own guidance, with a compact window when the entire overvie
 
 ## What's new in v1.3.1
 
-Improved bottom-bar initialization, with Auto-decline and saved-offer handling independent of the toolbar icon. Compatibility with the reported stutter-fix mod and rendering at smaller UI scales still need in-game verification.
+The setting is now called **Hide offers**, with clearer guidance about reviewing missed subsidies later. Improved bottom-bar initialization keeps hiding and saved-offer handling independent of the toolbar icon. Compatibility with the reported stutter-fix mod and rendering at smaller UI scales still need in-game verification.
 
 ## What's new in v1.3.0
 
@@ -94,13 +94,13 @@ Clearer History with one status per outcome, explanatory tooltips for missing va
 
 ## A few things to know
 
-- **Switching Auto-decline off refreshes the overview automatically.** Use Refresh for other updates while the window is open. The toolbar dot does not refresh the table.
+- **Switching Hide offers off refreshes the overview automatically.** Use Refresh for other updates while the window is open. The toolbar dot does not refresh the table.
 - **Task history is kept by the game.** Older outcomes can disappear when TF3 removes them. Saved declines and unsuccessful recoveries are stored separately by this mod for the save.
 - **Worker progress is a native workforce boost percentage.** Zero is shown as “0% Workers” when supplied by the game; it is not a cumulative passenger count.
 - **Some fields may be unavailable.** Open the game's detail window for the full task information.
 - **English is currently the supplied language.**
 
-Real-save testing on Linux covers the In Progress and History tables and all three compact empty views. The updated captures show Auto-decline guidance and the missed-offer count and yellow Offered dot. Accepted-task progress and its native notification continued during suppression in the maintainer's test. The maintainer also reported a multi-hour run with 33 offers visible after resuming the subsidy flow. The revised toolbar initialization still needs real-game verification. Gameplay testing on Windows, macOS, Xbox and PlayStation has not been performed. Mods that change the same toolbar or subsidy interface may conflict.
+Real-save testing on Linux covers the In Progress and History tables and all three compact empty views. The updated captures show offer-hiding guidance and the missed-offer count and yellow Offered dot. Accepted-task progress and its native notification continued during suppression in the maintainer's test. The maintainer also reported a multi-hour run with 33 offers visible after resuming the subsidy flow. The revised toolbar initialization still needs real-game verification. Gameplay testing on Windows, macOS, Xbox and PlayStation has not been performed. Mods that change the same toolbar or subsidy interface may conflict.
 
 ## Feedback
 

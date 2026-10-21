@@ -2,8 +2,9 @@
 
 ## v1.3.1 — More reliable toolbar
 
+- Renamed Auto-decline to **Hide offers**, with clearer guidance about reviewing missed subsidies later.
 - Improved initialization of the bottom-bar launcher.
-- Auto-decline and saved-offer handling remain active independently of the toolbar icon.
+- Offer hiding and saved-offer handling remain active independently of the toolbar icon.
 
 ## v1.3.0 — Recover previously hidden subsidies
 

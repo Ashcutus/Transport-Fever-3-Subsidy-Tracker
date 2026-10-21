@@ -32,11 +32,11 @@
         "tf3_subsidy_manager_empty_offers_hint": "No offers right now. Carry on with your routes and use Refresh to check again.",
         "tf3_subsidy_manager_empty_history_hint": "Successful and failed subsidies appear here while the game retains them.",
         "tf3_subsidy_manager_missing_value_tooltip": "Not provided by the game’s overview data.",
-        "tf3_subsidy_manager_auto_decline": "Auto-decline",
-        "tf3_subsidy_manager_auto_decline_waiting": "Auto-decline (please wait)",
-        "tf3_subsidy_manager_auto_decline_wait_updating": "Updating Auto-decline. Please wait before changing this setting.",
-        "tf3_subsidy_manager_auto_decline_wait_opening": "Opening a subsidy. Please wait before changing Auto-decline.",
-        "tf3_subsidy_manager_auto_decline_tooltip": "Saves and declines new offers. Off by default.\nTurn off to see missed subsidies that are still available\nExisting offers and accepted tasks are kept.",
+        "tf3_subsidy_manager_auto_decline": "Hide offers",
+        "tf3_subsidy_manager_auto_decline_waiting": "Hide offers (please wait)",
+        "tf3_subsidy_manager_auto_decline_wait_updating": "Updating Hide offers. Please wait before changing this setting.",
+        "tf3_subsidy_manager_auto_decline_wait_opening": "Opening a subsidy. Please wait before changing Hide offers.",
+        "tf3_subsidy_manager_auto_decline_tooltip": "Hides and saves new offers. Off by default.\nTurn off to see missed subsidies that are still available\nExisting offers and accepted tasks are kept.",
         "tf3_subsidy_manager_show_declined": "Show declined",
         "tf3_subsidy_manager_expired": "Expired",
         "tf3_subsidy_manager_hidden_available": "%d previously hidden subsidies are still available.",
@@ -54,6 +54,6 @@
         "tf3_subsidy_manager_recovery_reason_not_found": "The saved contract is no longer available.",
         "tf3_subsidy_manager_retry": "Try again",
         "tf3_subsidy_manager_available": "Available",
-        "tf3_subsidy_manager_configuration_unavailable": "Could not confirm Auto-decline. Try again."
+        "tf3_subsidy_manager_configuration_unavailable": "Could not confirm the Hide offers setting. Try again."
     }
 }
