@@ -33,7 +33,7 @@
         "tf3_subsidy_manager_empty_history_hint": "Successful and failed subsidies appear here while the game retains them.",
         "tf3_subsidy_manager_missing_value_tooltip": "Not provided by the game’s overview data.",
         "tf3_subsidy_manager_auto_decline": "Auto-decline",
-        "tf3_subsidy_manager_auto_decline_tooltip": "Saves and declines new offers. Off by default.\nTurn off to find saved offers in Offered and accept valid ones.\nExisting offers and accepted tasks are kept.",
+        "tf3_subsidy_manager_auto_decline_tooltip": "Saves and declines new offers. Off by default.\nTurn off to see missed subsidies that are still available\nExisting offers and accepted tasks are kept.",
         "tf3_subsidy_manager_show_declined": "Show declined",
         "tf3_subsidy_manager_expired": "Expired — could not recover",
         "tf3_subsidy_manager_hidden": "Previously hidden",
