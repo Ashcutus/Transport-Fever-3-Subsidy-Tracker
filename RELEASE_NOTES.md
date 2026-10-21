@@ -3,6 +3,7 @@
 ## v1.3.1 — More reliable toolbar
 
 - Renamed Auto-decline to **Hide offers**, with clearer guidance about reviewing missed subsidies later.
+- Updated the real-game gallery to show Hide offers and missed-offer reminders.
 - Improved initialization of the bottom-bar launcher.
 - Offer hiding and saved-offer handling remain active independently of the toolbar icon.
 

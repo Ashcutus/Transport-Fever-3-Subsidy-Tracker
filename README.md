@@ -41,19 +41,19 @@ You can move and pin the window. When there are no subsidies in any section, it 
 
 ## Screenshot gallery
 
-The gallery below uses real game captures. Some show the previous **Auto-decline** label; the setting is now **Hide offers**. The cover above is promotional artwork.
+The gallery below uses real game captures. The cover above is promotional artwork.
 
 ### Your subsidies, one click away
 
 ![The contract icon beside Industry Statistics opens Subsidy Manager](docs/screenshots/toolbar.png)
 
-### Skip new offers when you want to
+### Hide new offers until you're ready
 
-![The earlier Auto-decline tooltip explains that turning it off reveals missed subsidies that are still available](docs/screenshots/auto-decline.png)
+![The Hide offers tooltip explains that turning it off reveals missed subsidies that are still available](docs/screenshots/auto-decline.png)
 
 ### Pick up the opportunities you missed
 
-![The earlier Auto-decline setting off, with a yellow Offered dot and a tooltip reporting two previously hidden subsidies still available](docs/screenshots/missed-offers.png)
+![Hide offers switched off, with a yellow Offered dot and a tooltip reporting two previously hidden subsidies still available](docs/screenshots/missed-offers.png)
 
 ### Keep your next move in view
 
