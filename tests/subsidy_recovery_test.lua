@@ -270,6 +270,10 @@ local review = config(false, true)
 assert(review.count == 2 and review.enabled == false and not archive().automatic.enabled)
 assert(archive().entries[1].revealed and archive().entries[2].revealed)
 assert(archive().notice.count == 2 and #data.proposedSubventions == 1)
+assert(review.newCount == 2, 'The first review announces newly hidden offers')
+config(true, false)
+local repeated = config(false, true)
+assert(repeated.count == 2 and repeated.newCount == 0, 'Repeated toggles must keep old offers without announcing them again')
 local noticeSequence = archive().notice.sequence
 config(false, false)
 assert(archive().notice.sequence == noticeSequence, 'Startup synchronization must not erase an unread resume notice')
@@ -303,7 +307,8 @@ assert(#data.proposedSubventions == 3 and archive().entries[2].status == 'saved'
 local paymentsBefore = payments
 event('', 'Subvention', 'onAccept', {uid = 80})
 assert(#data.activeSubventions == 1 and data.activeSubventions[1].uid == 80 and payments == paymentsBefore + 1)
-config(false, true)
+local freshReview = config(false, true)
+assert(freshReview.count == 2 and freshReview.newCount == 1, 'Only newly hidden offers join the next reminder, while all valid offers remain available')
 assert(archive().entries[2].revealed)
 -- Legacy offers already shown with mode off gain persistent flags on enabling.
 archive().entries[1].revealed = nil

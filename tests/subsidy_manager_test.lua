@@ -55,7 +55,8 @@ function react.RegisterWrapperRecipe(name, wrapped, fn)
 end
 local function state(value)
     return {value = value, old = function(self) return self.value end,
-        set = function(self, nextValue) self.value = nextValue end}
+        set = function(self, nextValue) self.value = nextValue end,
+        transform = function(self, fn) self.value = fn(self.value) end}
 end
 function react.useStateLazy(fn)
     stateIndex = stateIndex + 1

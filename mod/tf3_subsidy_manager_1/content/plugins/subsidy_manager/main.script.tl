@@ -21,20 +21,6 @@ local pendingArchiveRequest : {any : any} = nil
 local archiveRequestSession = tostring({})
 local archiveRequestSerial = 0
 
-local function sendArchiveRequest(action : string, key : string, sequence : number, enabled? : boolean, review? : boolean)
-	if pendingArchiveRequest then return end
-	archiveRequestSerial = archiveRequestSerial + 1
-	local requestId = archiveRequestSession .. ":" .. tostring(archiveRequestSerial)
-	pendingArchiveRequest = { action = action, key = key, sequence = sequence, attempts = 0, enabled = enabled, review = review, requestId = requestId }
-	local ok = pcall(function()
-		api.cmd.sendCommand(api.cmd.makeScriptingSendEventCmd(MOD_ID, "tf3SubsidyManager", "tf3SubsidyManager", { action = action, key = key, enabled = enabled, review = review, requestId = requestId }))
-	end)
-	if not ok then
-		pendingArchiveRequest = nil
-		react.fireEvent(nil, ARCHIVE_REPLY_EVENT, { action = action, key = key, success = false, reason = "unavailable", sequence = sequence, enabled = enabled, review = review })
-	end
-end
-
 local function readArchiveReply() : {any : any}
 	local nativeEnabled : boolean = nil
 	local ok, value = pcall(function() : any
@@ -67,6 +53,37 @@ local function checkArchiveReply(request : {any : any}, response : {any : any})
 	end
 	pendingArchiveRequest = nil
 	react.fireEvent(nil, ARCHIVE_REPLY_EVENT, response)
+end
+
+local function sendArchiveRequest(action : string, key : string, sequence : number, enabled? : boolean, review? : boolean)
+	if pendingArchiveRequest then return end
+	archiveRequestSerial = archiveRequestSerial + 1
+	local requestId = archiveRequestSession .. ":" .. tostring(archiveRequestSerial)
+	local request : {any : any} = { action = action, key = key, sequence = sequence, attempts = 0, enabled = enabled, review = review, requestId = requestId }
+	pendingArchiveRequest = request
+	local ok = pcall(function()
+		api.cmd.sendCommand(api.cmd.makeScriptingSendEventCmd(MOD_ID, "tf3SubsidyManager", "tf3SubsidyManager", { action = action, key = key, enabled = enabled, review = review, requestId = requestId }), function(_data : ScriptingSendEventCommandData, success : boolean)
+			-- A one-shot read after command execution avoids relying solely on the
+			-- background identity timer for the user's requested refresh.
+			react.enqueueDeferredStep(function()
+				if pendingArchiveRequest ~= request then return end
+				local response = success and readArchiveReply() or nil
+				react.enqueueJoin(function()
+					if pendingArchiveRequest ~= request then return end
+					if not success then
+						pendingArchiveRequest = nil
+						react.fireEvent(nil, ARCHIVE_REPLY_EVENT, { action = action, key = key, success = false, reason = "unavailable", sequence = sequence, enabled = enabled, review = review })
+					elseif response.requestId == requestId then
+						checkArchiveReply(request, response)
+					end
+				end, "TF3SubsidyManager:commandReply")
+			end, "TF3SubsidyManager:commandRead")
+		end)
+	end)
+	if not ok then
+		pendingArchiveRequest = nil
+		react.fireEvent(nil, ARCHIVE_REPLY_EVENT, { action = action, key = key, success = false, reason = "unavailable", sequence = sequence, enabled = enabled, review = review })
+	end
 end
 
 local record OfferBadgeState
@@ -236,7 +253,8 @@ local ManagerController = react.RegisterRecipe("TF3SubsidyManagerController", fu
 		local reply = value as {any : any}
 		local review = reply.action == "review" or (reply.action == "configure" and reply.enabled == false and reply.review == true)
 		if not review or reply.success ~= true or reply.reason == "unavailable" or type(reply.count) ~= "number" then return end
-		local count = reply.count as number
+		local count = (reply.newCount ~= nil and reply.newCount or reply.count) as number
+		if type(count) ~= "number" then return end
 		if count <= 0 or not (count < math.huge) or count ~= math.floor(count) then return end
 		local badge = tracked:get()
 		if not badge.pending then
@@ -694,6 +712,7 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 	local busy : ReactStateT<boolean> = react.useState(pendingArchiveRequest ~= nil)
 	local notice : ReactStateT<{any : any}> = react.useStateLazy(function() : {any : any}
 		local response = snapshot:old().archiveNotice
+		if type(response.newCount) == "number" then response.count = response.newCount end
 		if response.action == "recover" and response.success == true then return nil end
 		if response.action == "configure" and response.review == true and response.success == true then response.action = "review" end
 		if (not autoDecline:old() or (response.action == "configure" and response.reason == "unavailable")) and type(response.sequence) == "number" and (response.sequence as number) > acknowledgedArchiveSequence() then return response end
@@ -708,7 +727,7 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 		local updated = readSnapshot()
 		if acknowledgeVisibleReview(notice:old(), updated) then notice:set(nil) end
 		snapshot:set(updated)
-		generation:set(generation:old() + 1)
+		generation:transform(function(value : integer) : integer return value + 1 end)
 	end
 	local function request(action : string, key : string, disabling? : boolean, enabled? : boolean, review? : boolean)
 		if busy:old() or pendingArchiveRequest then return end
@@ -729,7 +748,8 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 	end)
 	react.onEvent(ARCHIVE_REPLY_EVENT, function(_name : string, value : any)
 		if type(value) ~= "table" then return end
-		local reply = value as {any : any}
+		local reply = copyTable(value) as {any : any}
+		if type(reply.newCount) == "number" then reply.count = reply.newCount end
 		busy:set(false)
 		if reply.action == "configure" then
 			if reply.success == true then
@@ -750,7 +770,7 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 			for _index, entry in ipairs(updated.offered) do if entry.recordCopy and entry.recordCopy.uid == uid then openDetail(entry) end end
 		end
 		snapshot:set(updated)
-		generation:set(generation:old() + 1)
+		generation:transform(function(value : integer) : integer return value + 1 end)
 	end)
 	local current = snapshot:old()
 	-- Acknowledge only after successful mounting, never merely on the toolbar click.
@@ -787,7 +807,7 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 	elseif section == 2 then content = renderTable(offers, section, generation:old())
 	else content = renderTable(history, section, generation:old()) end
 	local message = notice:old()
-	local unseenHidden = current.stateFound and not current.readError and not busy:old() and hiddenCount > 0 and message ~= nil and message.action == "review" and message.success == true and message.reason ~= "unavailable" and type(message.count) == "number" and (message.count as number) > 0 and type(message.sequence) == "number" and (message.sequence as number) > acknowledgedArchiveSequence()
+	local unseenHidden = not autoDecline:old() and current.stateFound and not current.readError and not busy:old() and hiddenCount > 0 and message ~= nil and message.action == "review" and message.success == true and message.reason ~= "unavailable" and type(message.count) == "number" and (message.count as number) > 0 and type(message.sequence) == "number" and (message.sequence as number) > acknowledgedArchiveSequence()
 	local buttons : {Builtin.ToggleButtonGroupChildParam} = {}
 	local counts = {#current.active, #offers, #history}
 	for index, label in ipairs({"active", "offered", "history"}) do
@@ -839,7 +859,7 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 						if entry.outcome == "hidden" then entry.revealed = true end
 					end
 					snapshot:set(updated)
-					generation:set(generation:old() + 1)
+					generation:transform(function(value : integer) : integer return value + 1 end)
 				end
 				autoDecline:set(value == 1)
 				showDeclined:set(false)
@@ -855,7 +875,7 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 			label = _("tf3_subsidy_manager_show_declined"), value = showDeclined:old() and 1 or 0,
 			onValueChange = function(value : integer)
 				showDeclined:set(value == 1)
-				generation:set(generation:old() + 1)
+				generation:transform(function(value : integer) : integer return value + 1 end)
 			end,
 		}
 	end

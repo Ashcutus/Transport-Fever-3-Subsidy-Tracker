@@ -137,19 +137,23 @@ local function command(state, param)
         end
     end
     if param.action == "review" or (param.action == "configure" and param.review == true) then
-        local count = 0
+        local count, newCount = 0, 0
         local unavailable = false
         for _, entry in ipairs(saved.entries) do
             if type(entry) == "table" and entry.status == "saved" and entry.source == "automatic" then
                 -- Exceptions mean temporarily unreadable, not an expired offer.
                 local ok, record, reason = pcall(candidate, entry, data)
-                if ok and record then count = count + 1; entry.revealed = true
+                if ok and record then
+                    count = count + 1
+                    if entry.revealed ~= true then newCount = newCount + 1 end
+                    entry.revealed = true
                 elseif ok then entry.status, entry.reason = "expired", reason end
                 if not ok then unavailable = true end
             end
         end
         respond(saved, param, param.action, nil, param.action == "configure" or not unavailable, unavailable and count == 0 and "unavailable" or nil, count)
         if param.action == "configure" then saved.response.enabled, saved.response.review = false, true end
+        saved.response.newCount = newCount
         saved.notice = copy(saved.response)
     elseif param.action == "recover" and type(param.key) == "string" then
         for index, entry in ipairs(saved.entries) do

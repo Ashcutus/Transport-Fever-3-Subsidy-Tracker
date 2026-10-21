@@ -17,7 +17,7 @@ Compare offers, follow the tasks you've accepted, and see how your subsidies tur
 
 Prefer to hide new offers? Enable **Hide offers** in the manager. It is off by default, applies only to offers arriving after you enable it, and saves your choice for this game. Existing offers, previously revealed missed offers and accepted tasks are left alone. New offers are saved and hidden before they reach the game’s offer notifications, without setting the manager’s toolbar dot. The option takes effect when the game confirms the change. While a subsidy action is finishing, the setting stays readable and shows **please wait**; hover for the reason.
 
-When you switch Hide offers off, the manager refreshes the overview automatically, checks saved offers and includes previously hidden contracts directly in **Offered**, with its count updated. The **yellow dot on the toolbar icon** also lights when missed offers become available; opening the manager clears it. A **yellow dot on Offered** marks hidden offers waiting for review; hover to see how many are still available. Opening Offered clears the dot. Use **Show declined** to include manual declines too. Click an offer to open the game’s usual details, then choose Accept or Decline as normal.
+When you switch Hide offers off, the manager refreshes the overview automatically, checks saved offers and includes previously hidden contracts directly in **Offered**, with its count updated. The **yellow dot on the toolbar icon** also lights when missed offers become available; opening the manager clears it. A **yellow dot on Offered** marks hidden offers waiting for review; hover to see how many are still available. Opening Offered clears the dot. Switching Hide offers off again only announces newly revealed offers. Use **Show declined** to include manual declines too. Click an offer to open the game’s usual details, then choose Accept or Decline as normal.
 
 Recovery keeps the original requirements and rewards. The remaining offer timer pauses while a contract is saved and resumes when recovered; the deadline for an accepted task is unchanged. Saved offers belong to this save. An offer that is no longer valid appears in History as **Expired**, with a reason and no task-failure penalty. Temporary read errors leave it saved and offer **Try again**.
 
@@ -78,7 +78,7 @@ Each section has its own guidance, with a compact window when the entire overvie
 
 ## What's new in v1.3.1
 
-The setting is now called **Hide offers**, with clearer guidance about reviewing missed subsidies later. Improved bottom-bar initialization keeps hiding and saved-offer handling independent of the toolbar icon. Compatibility with the reported stutter-fix mod and rendering at smaller UI scales still need in-game verification.
+Switching Hide offers off refreshes the overview after confirmation and only announces newly revealed offers. The setting is now called **Hide offers**, with clearer guidance about reviewing missed subsidies later. Improved bottom-bar initialization keeps hiding and saved-offer handling independent of the toolbar icon. Compatibility with the reported stutter-fix mod and rendering at smaller UI scales still need in-game verification.
 
 ## What's new in v1.3.0
 

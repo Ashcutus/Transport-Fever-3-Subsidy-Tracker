@@ -30,6 +30,7 @@ local function world(offers)
 end
 local function context() return {refs = {}, states = {}, events = {}, mounts = {}, timers = {}} end
 local restricted, joins, forbidden = false, {}, {}
+local completions, deferred, completionSuccess = {}, {}, true
 local function requireMain(name)
     if restricted then
         forbidden[#forbidden + 1] = name
@@ -83,6 +84,7 @@ local function boot()
         if not ctx.states[ctx.stateIndex] then
             ctx.states[ctx.stateIndex] = {value = fn(), old = function(self) return self.value end,
                 set = function(self, nextValue) self.value = nextValue end,
+                transform = function(self, fn) self.value = fn(self.value) end,
                 hasExpired = function() return ctx.expired == true end}
         end
         return ctx.states[ctx.stateIndex]
@@ -94,6 +96,7 @@ local function boot()
         activeContext.timers[1] = {tick = fn, interval = interval}
     end
     function react.enqueueJoin(fn) joins[#joins + 1] = fn end
+    function react.enqueueDeferredStep(fn) deferred[#deferred + 1] = fn end
     function react.onEvent(name, fn) activeContext.events[name] = fn end
     function react.onMount(fn) activeContext.mounts[#activeContext.mounts + 1] = fn end
     function react.fireEvent(_, name, data)
@@ -125,7 +128,7 @@ local function boot()
                 or (namespace == "tf3_subsidy_manager" and target == "tf3SubsidyManager" and event == target))
             return {uid = data.uid, action = data.action, key = data.key, enabled = data.enabled, review = data.review, requestId = data.requestId}
         end,
-        sendCommand = function(command)
+        sendCommand = function(command, callback)
             requireMain("sendCommand")
             if commandFailure then error("command unavailable") end
             if command.action == 'configure' then
@@ -144,6 +147,7 @@ local function boot()
                 component.state.tf3SubsidyManagerArchive = a
             elseif command.action then archiveCommands[#archiveCommands + 1] = command
             else commands[#commands + 1] = command end
+            if callback then completions[#completions + 1] = function() callback(command, completionSuccess) end end
         end,
     }, type = {ComponentType = {GAME_SCRIPT = 1, GAME_TIME = 2, GAME_SPEED = 3}}, engine = {
         util = {getWorld = function() return 1 end},
@@ -705,6 +709,63 @@ local detailCount = #detailEvents
 automaticTable.columns[1].recipe({userParam = automaticTable.userParam, rowKey = 1}).children[1].onClick()
 assert(#detailEvents == detailCount + 1 and detailEvents[#detailEvents].nonEntity == 'subsidy_401', 'Auto-refreshed cells must select the new record')
 print('PASS: immediate disable refresh before confirmation, latest counts/rows, stable tab, rebuilt cells and confirmed review refresh')
+
+-- State.old() can remain the previous render's value during multiple callbacks.
+-- Reusing its generation leaves native DataTable cells bound to old userParam.
+local generationState = windowContext.states[4]
+local oldGeneration = generationState.value
+local originalOld = generationState.old
+generationState.old = function() return oldGeneration end
+local refreshButton = tree.content.children[1].children[2]
+refreshButton.onClick(); refreshButton.onClick()
+assert(generationState.value == oldGeneration + 2, 'Every refresh must get a distinct table identity before the next render')
+generationState.old = originalOld
+
+-- A command confirmation must refresh without waiting for the background timer.
+reset({}, {autoDecline = {version = 1, enabled = true, offers = {}}})
+completions, deferred = {}, {}
+badge(); poll(); completions = {}
+tree = render(windowRecipe, windowContext)
+tree.content.children[1].children[3].onValueChange(0)
+component.state.activeSubventions = {offer(900)}
+assert(#completions == 1, 'Configuration must subscribe to command completion')
+completions[1]()
+restricted = true
+for _, fn in ipairs(deferred) do fn() end
+restricted = false
+deferred = {}; flushJoins()
+tree = render(windowRecipe, windowContext)
+assert(tree.content.children[1].children[1].buttons[1].content.text == 'tf3_subsidy_manager_active (1)', 'Command completion must refresh the latest overview without a timer tick or manual Refresh')
+assert(tree.content.children[1].children[3].label == 'tf3_subsidy_manager_auto_decline')
+
+local confirmedGeneration = windowContext.states[4].value
+completions[1]()
+restricted = true
+for _, fn in ipairs(deferred) do fn() end
+restricted = false
+deferred = {}; flushJoins()
+assert(windowContext.states[4].value == confirmedGeneration, 'A duplicate/late command callback must not refresh twice')
+
+-- Failure must leave retry guidance, never claim that review completed.
+tree.content.children[1].children[3].onValueChange(1)
+completionSuccess = false
+completions[#completions]()
+restricted = true
+for _, fn in ipairs(deferred) do fn() end
+restricted = false
+deferred = {}; flushJoins(); completionSuccess = true
+assert(feedback(render(windowRecipe, windowContext)), 'A failed command completion must preserve retry guidance')
+
+-- A review may validate old saved offers without finding anything newly hidden.
+reset({}, {})
+badge(); poll()
+component.state.tf3SubsidyManagerArchive.entries = {
+    {key = 'old', record = offer(901), remaining = 50, source = 'automatic', status = 'saved', revealed = true},
+}
+tree = render(windowRecipe, windowContext)
+react.fireEvent(nil, 'tf3SubsidyManagerArchiveReply', {action = 'review', success = true, count = 2, newCount = 0, sequence = 900})
+assert(not badge() and not offeredDot(render(windowRecipe, windowContext)), 'Already revealed offers must not produce a new reminder')
+print('PASS: batched refresh identity, command-driven confirmation refresh and silence for already revealed offers')
 
 -- Toolbar reminders come only from a successful, positive resume review.
 reset({}, {unrelated = 'preserve'})
