@@ -329,7 +329,20 @@ local function toggle(value)
 end
 reset({offer(1)}, {unrelated = {keep = true}})
 commands, archiveCommands, configCommands, loadEnabled = {}, {}, {}, false
-assert(not badge()); poll()
+assert(not badge())
+local waitingTree = render(windowRecipe, windowContext)
+local waitingCheckbox = waitingTree.content.children[1].children[3]
+assert(waitingCheckbox.meta.enabled == true, 'Waiting must not dim Auto-decline')
+assert(waitingCheckbox.label == 'tf3_subsidy_manager_auto_decline_waiting')
+assert(waitingCheckbox.meta.tooltip == 'tf3_subsidy_manager_auto_decline_wait_updating')
+local configsBefore = #configCommands
+waitingCheckbox.onValueChange(1)
+assert(#configCommands == configsBefore and not saved.autoDecline, 'A blocked click must not change the setting or send another command')
+assert(render(windowRecipe, windowContext).content.children[1].children[3].value == 0)
+poll()
+waitingCheckbox = render(windowRecipe, windowContext).content.children[1].children[3]
+assert(waitingCheckbox.meta.enabled and waitingCheckbox.label == 'tf3_subsidy_manager_auto_decline')
+assert(waitingCheckbox.meta.tooltip == 'tf3_subsidy_manager_auto_decline_tooltip')
 toggle(true)
 assert(saved.autoDecline.enabled and saved.unrelated.keep)
 assert(configCommands[#configCommands].enabled == true)
@@ -432,6 +445,12 @@ assert(action.children[1].content.layout.children[1].text == 'Saved contract')
 action.children[1].onClick()
 assert(#archiveCommands == 2 and archiveCommands[2].action == 'recover' and archiveCommands[2].key == '1')
 assert(#detailEvents == 0, 'Native details must wait for the simulation confirmation')
+local openingCheckbox = render(windowRecipe, windowContext).content.children[1].children[3]
+assert(openingCheckbox.meta.enabled and openingCheckbox.label == 'tf3_subsidy_manager_auto_decline_waiting')
+assert(openingCheckbox.meta.tooltip == 'tf3_subsidy_manager_auto_decline_wait_opening')
+configsBefore = #configCommands
+openingCheckbox.onValueChange(1)
+assert(#configCommands == configsBefore and not saved.autoDecline.enabled, 'Opening a subsidy must keep the waiting toggle unchanged')
 action.children[1].onClick()
 assert(#archiveCommands == 2, 'Repeated clicks while opening must not duplicate the request')
 -- The snapshot stays unchanged until the simulation confirms recovery.
@@ -442,6 +461,7 @@ table.remove(component.state.tf3SubsidyManagerArchive.entries, 1)
 component.state.tf3SubsidyManagerArchive.response = {sequence = 3, action = 'recover', key = '1', success = true, requestId = archiveCommands[2].requestId}
 poll(); tree = render(windowRecipe, windowContext)
 assert(not feedback(tree), 'Opening an offer must not show recovery implementation messages')
+assert(tree.content.children[1].children[3].label == 'tf3_subsidy_manager_auto_decline')
 assert(#detailEvents == 1 and detailEvents[1].nonEntity == 'subsidy_101')
 local previousKey = tableView.meta.localKey
 tableView = tableNode(tree)
@@ -478,6 +498,7 @@ component.state.tf3SubsidyManagerArchive.response.sequence = -1
 for _ = 1, 4 do poll() end
 tree = render(windowRecipe, windowContext)
 assert(feedback(tree).children[1].text == 'tf3_subsidy_manager_configuration_unavailable')
+assert(tree.content.children[1].children[3].meta.enabled and tree.content.children[1].children[3].label == 'tf3_subsidy_manager_auto_decline', 'Timeout must release the waiting label and keep the setting readable')
 assert(component.state.tf3SubsidyManagerArchive.entries[2].status == 'saved')
 print('PASS: quiet suppression, confirmed Offered dot/count, automatic hidden rows, optional manual declines, recovery, refreshed cells, expired History and persisted review acknowledgement')
 

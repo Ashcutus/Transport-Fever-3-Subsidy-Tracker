@@ -3,7 +3,7 @@
 ## v1.3.0 — Recover previously hidden subsidies
 
 - Auto-decline saves and declines new offers before they reach the offer notification flow, after the game confirms the option. Previously hidden offers do not set the manager’s toolbar dot.
-- Added confirmation and retry guidance when changing Auto-decline.
+- Auto-decline stays readable while waiting for a subsidy action, with a “please wait” label, an explanation on hover and retry guidance if confirmation fails.
 - When you switch Auto-decline off, previously hidden offers appear directly in Offered and its count. A yellow dot marks offers waiting for review, with the available count on hover. Opening Offered clears the dot.
 - Missed offers use the normal Offered columns and open the game’s usual details when clicked, with the normal Accept and Decline controls. Show declined includes manual declines too.
 - Saved contracts keep their requirements, rewards and remaining offer time. Their offer timer pauses while saved; accepted-task deadlines are unchanged.

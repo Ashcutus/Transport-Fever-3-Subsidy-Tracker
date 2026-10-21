@@ -759,6 +759,11 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 			}
 		end
 	end
+	local autoDeclineWaiting = busy:old() or pendingArchiveRequest ~= nil
+	local autoDeclineTooltip = _("tf3_subsidy_manager_auto_decline_tooltip")
+	if autoDeclineWaiting then
+		autoDeclineTooltip = _(pendingArchiveRequest and pendingArchiveRequest.action == "recover" and "tf3_subsidy_manager_auto_decline_wait_opening" or "tf3_subsidy_manager_auto_decline_wait_updating")
+	end
 	local controlChildren : {TreeNodeId} = {
 		builtin.ToggleButtonGroup {
 			buttons = buttons, selected = section, deselectAllowed = false,
@@ -777,8 +782,8 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 			onClick = refresh,
 		},
 		builtin.CheckBox {
-			meta = { tooltip = _("tf3_subsidy_manager_auto_decline_tooltip"), enabled = not busy:old() and not pendingArchiveRequest },
-			label = _("tf3_subsidy_manager_auto_decline"), value = autoDecline:old() and 1 or 0,
+			meta = { tooltip = autoDeclineTooltip, enabled = true },
+			label = _(autoDeclineWaiting and "tf3_subsidy_manager_auto_decline_waiting" or "tf3_subsidy_manager_auto_decline"), value = autoDecline:old() and 1 or 0,
 			onValueChange = function(value : integer)
 				if busy:old() or pendingArchiveRequest then return end
 				autoDecline:set(value == 1)
