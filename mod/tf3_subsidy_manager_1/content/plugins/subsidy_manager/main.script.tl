@@ -304,7 +304,7 @@ local function copyTable(value : any) : any
 	return result
 end
 
-local function getCard(recordCopy : ISubvention, offered : boolean) : SubventionCardData
+local function getCard(recordCopy : ISubvention, offered : boolean, savedRemaining? : number) : SubventionCardData
 	if type(recordCopy.id) ~= "string" then return nil end
 	local id = api.res.genericRep.find(recordCopy.id)
 	if id < 0 then return nil end
@@ -330,12 +330,15 @@ local function getCard(recordCopy : ISubvention, offered : boolean) : Subvention
 		card.expireDuration = nil
 		local duration = recordCopy.data.expireDurationProposed
 		local spawnTime = recordCopy.spawnTime
-		if type(duration) == "number" and duration >= 0 and duration < math.huge and type(spawnTime) == "number" and math.abs(spawnTime) < math.huge then
+		if type(duration) == "number" and duration >= 0 and duration < math.huge then
 			local world = api.engine.util.getWorld()
-			local time = api.engine.getComponent(world, api.type.ComponentType.GAME_TIME) as Engine.Component.GameTime
 			local speed = api.engine.getComponent(world, api.type.ComponentType.GAME_SPEED) as Engine.Component.GameSpeed
-			if time and speed then
-				local remaining = duration - (time.gameTime - spawnTime)
+			local remaining = savedRemaining
+			if remaining == nil and type(spawnTime) == "number" and math.abs(spawnTime) < math.huge then
+				local time = api.engine.getComponent(world, api.type.ComponentType.GAME_TIME) as Engine.Component.GameTime
+				if time then remaining = duration - (time.gameTime - spawnTime) end
+			end
+			if speed and type(remaining) == "number" and math.abs(remaining) < math.huge and (savedRemaining == nil or savedRemaining >= 0) then
 				card.expireDuration = {
 					value = duration > 0 and remaining / duration or 0,
 					name = util.formatDurationWithCurrentCalenderSpeed(math.floor(remaining), speed.millisPerDay),
@@ -370,7 +373,7 @@ local function resourceName(recordCopy : ISubvention) : string
 end
 
 -- Keep detached records and card data: engine-owned tables never become React state.
-local function copyEntries(items : {ISubvention}, offered? : boolean, outcome? : string) : {Entry}
+local function copyEntries(items : {ISubvention}, offered? : boolean, outcome? : string, savedRemaining? : number) : {Entry}
 	local entries : {Entry} = {}
 	for _index, item in ipairs(items) do
 		local data = type(item) == "table" and item.data or nil
@@ -386,7 +389,7 @@ local function copyEntries(items : {ISubvention}, offered? : boolean, outcome? :
 			entry.recordCopy = copyTable(item) as ISubvention
 			local named, name = pcall(resourceName, entry.recordCopy)
 			if named then entry.resourceName = name as string end
-			local ok, card = pcall(getCard, entry.recordCopy, offered or false)
+			local ok, card = pcall(getCard, entry.recordCopy, offered or false, savedRemaining)
 			if ok then entry.card = card as SubventionCardData
 			else log.warning("[tf3_subsidy_manager] Unable to format subsidy: " .. tostring(card)) end
 		end
@@ -421,7 +424,7 @@ local function querySnapshot() : Snapshot
 		if type(savedNotice) == "table" then snapshot.archiveNotice = copyTable(savedNotice) as {any : any} end
 		for _index, value in ipairs(archive.entries as {{any : any}}) do
 			if type(value) == "table" and type(value.record) == "table" and type(value.key) == "string" then
-				local entries = copyEntries({value.record as ISubvention}, false, value.status == "expired" and "expired" or value.source == "automatic" and "hidden" or "declined")
+				local entries = copyEntries({value.record as ISubvention}, value.status == "saved", value.status == "expired" and "expired" or value.source == "automatic" and "hidden" or "declined", value.remaining as number)
 				local entry = entries[1]
 				entry.archiveKey = value.key as string
 				entry.reason = type(value.reason) == "string" and value.reason as string or "unsupported"
@@ -455,6 +458,12 @@ local function canOpenDetail(item : Entry) : boolean
 	return type(uid) == "number" and uid >= 0 and uid < math.huge and uid == math.floor(uid)
 end
 
+local function canRestoreOffer(item : Entry) : boolean
+	if not item or not item.archiveKey or item.outcome == "expired" or not item.recordCopy then return false end
+	local uid = item.recordCopy.uid
+	return type(uid) == "number" and uid >= 0 and uid < math.huge and uid == math.floor(uid)
+end
+
 local function openDetail(item : Entry)
 	if not canOpenDetail(item) then return end
 	-- Preserve the UAT-confirmed vanilla notification dispatch and detached record.
@@ -483,13 +492,9 @@ local function columnText(item : Entry, key : string) : string
 	if key == "status" then
 		if item.outcome == "" then return _("tf3_subsidy_manager_available") end
 		if item.outcome == "expired" then return _("tf3_subsidy_manager_expired") end
-		if item.outcome == "hidden" then return _("tf3_subsidy_manager_hidden") end
-		if item.outcome == "declined" then return _("tf3_subsidy_manager_declined") end
 		return _(item.outcome == "failed" and "tf3_subsidy_manager_failed" or "tf3_subsidy_manager_completed")
 	end
-	if key == "action" then return item.archiveKey and _("tf3_subsidy_manager_recover") or _("tf3_subsidy_manager_details") end
 	if item.outcome == "expired" and key == "reward" then return _("tf3_subsidy_manager_recovery_reason_" .. (item.reason or "unsupported")) end
-	if item.archiveKey and key == "time" then return _("tf3_subsidy_manager_saved_timer") end
 	if key == "resource" then return item.resourceName and item.resourceName ~= "" and item.resourceName or "—" end
 	if key == "requirement" then
 		local required = card and card.cargoToDeliver or item.required
@@ -557,10 +562,10 @@ local function makeCell(key : string) : Recipe<Builtin.TableCellParam>
 		end
 		return builtin.BoxLayout {
 			children = { builtin.Button {
-				meta = { class = key == "reward" and "tf3-subsidy-cell, tf3-subsidy-reward-cell" or key == "time" and "tf3-subsidy-cell, tf3-subsidy-time-cell" or "tf3-subsidy-cell", tooltip = tooltip, enabled = canOpenDetail(item) or (key == "action" and item ~= nil and item.archiveKey ~= nil and item.outcome ~= "expired" and not pendingArchiveRequest) },
+				meta = { class = key == "reward" and "tf3-subsidy-cell, tf3-subsidy-reward-cell" or key == "time" and "tf3-subsidy-cell, tf3-subsidy-time-cell" or "tf3-subsidy-cell", tooltip = tooltip, enabled = canOpenDetail(item) or canRestoreOffer(item) },
 				content = builtin.Component { layout = builtin.BoxLayout { orientation = builtin.type.Orientation.Horizontal, children = parts } },
 				onClick = function()
-					if item and item.archiveKey and key == "action" and item.outcome ~= "expired" then
+					if canRestoreOffer(item) then
 						react.fireEvent(nil, ARCHIVE_RECOVER_EVENT, item.archiveKey)
 					elseif item then openDetail(item) end
 				end,
@@ -570,7 +575,7 @@ local function makeCell(key : string) : Recipe<Builtin.TableCellParam>
 end
 
 local cellRecipes : {string : Recipe<Builtin.TableCellParam>} = {}
-for _index, key in ipairs({"type", "resource", "destination", "requirement", "progress", "reward", "time", "status", "action"}) do cellRecipes[key] = makeCell(key) end
+for _index, key in ipairs({"type", "resource", "destination", "requirement", "progress", "reward", "time", "status"}) do cellRecipes[key] = makeCell(key) end
 
 local function renderEmpty(section : integer) : TreeNodeId
 	local title = section == 1 and _("tf3_subsidy_manager_no_active") or section == 2 and _("tf3_subsidy_manager_no_offers") or _("tf3_subsidy_manager_no_history")
@@ -594,13 +599,10 @@ local function renderEmpty(section : integer) : TreeNodeId
 	}
 end
 
-local function renderTable(items : {Entry}, section : integer, generation : integer, declined? : boolean) : TreeNodeId
+local function renderTable(items : {Entry}, section : integer, generation : integer) : TreeNodeId
 	if #items == 0 then return renderEmpty(section) end
 	local keys = section == 3 and {"status", "type", "resource", "destination", "reward"} or
 		{"type", "resource", "destination", section == 1 and "progress" or "requirement", "reward", "time"}
-	if section == 2 and declined then
-		keys = {"status", "type", "destination", "requirement", "reward", "action"}
-	end
 	local columns : {TreeNodeId} = {}
 	for _index, key in ipairs(keys) do
 		local label = key == "reward" and section == 3 and "reward_consequence" or key == "time" and section == 1 and "deadline" or key
@@ -656,6 +658,7 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 	local busy : ReactStateT<boolean> = react.useState(pendingArchiveRequest ~= nil)
 	local notice : ReactStateT<{any : any}> = react.useStateLazy(function() : {any : any}
 		local response = snapshot:old().archiveNotice
+		if response.action == "recover" and response.success == true then return nil end
 		if response.action == "configure" and response.review == true and response.success == true then response.action = "review" end
 		if (not autoDecline:old() or (response.action == "configure" and response.reason == "unavailable")) and type(response.sequence) == "number" and (response.sequence as number) > acknowledgedArchiveSequence() then return response end
 		return nil
@@ -691,7 +694,7 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 			end
 		end
 		local updated = readSnapshot()
-		if acknowledgeVisibleReview(reply, updated) then
+		if acknowledgeVisibleReview(reply, updated) or (reply.action == "recover" and reply.success == true) then
 			notice:set(nil)
 		else
 			notice:set(reply)
@@ -722,7 +725,6 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 	for _index, item in ipairs(current.expired) do history[#history + 1] = item end
 	local offers : {Entry} = {}
 	local hiddenCount, manualCount = 0, 0
-	local savedOffersVisible = false
 	for _index, item in ipairs(current.offered) do offers[#offers + 1] = item end
 	if not autoDecline:old() then
 		for _index, item in ipairs(current.declined) do
@@ -730,7 +732,6 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 			else manualCount = manualCount + 1 end
 			if item.outcome == "hidden" or showDeclined:old() then
 				offers[#offers + 1] = item
-				savedOffersVisible = true
 			end
 		end
 	end
@@ -738,7 +739,7 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 	if current.readError then content = builtin.TextView { text = _("tf3_subsidy_manager_read_error") }
 	elseif not current.stateFound then content = builtin.TextView { text = _("tf3_subsidy_manager_unavailable") }
 	elseif section == 1 then content = renderTable(current.active, section, generation:old())
-	elseif section == 2 then content = renderTable(offers, section, generation:old(), savedOffersVisible)
+	elseif section == 2 then content = renderTable(offers, section, generation:old())
 	else content = renderTable(history, section, generation:old()) end
 	local message = notice:old()
 	local unseenHidden = current.stateFound and not current.readError and not busy:old() and hiddenCount > 0 and message ~= nil and message.action == "review" and message.success == true and message.reason ~= "unavailable" and type(message.count) == "number" and (message.count as number) > 0 and type(message.sequence) == "number" and (message.sequence as number) > acknowledgedArchiveSequence()
@@ -808,7 +809,6 @@ local SubsidyManagerWindow = react.RegisterWrapperRecipe("TF3SubsidyManagerWindo
 		if not busy:old() and message then
 			if message.action == "configure" and message.reason == "unavailable" then text = _("tf3_subsidy_manager_configuration_unavailable")
 			elseif message.reason == "unavailable" then text = _("tf3_subsidy_manager_recovery_unavailable")
-			elseif message.success == true then text = _("tf3_subsidy_manager_recovered")
 			else text = _("tf3_subsidy_manager_recovery_expired") end
 		end
 		local feedback : {TreeNodeId} = { builtin.TextView { text = text } }

@@ -17,9 +17,9 @@ Compare offers, follow the tasks you've accepted, and see how your subsidies tur
 
 Prefer to skip future offers? Enable **Auto-decline** in the manager. It is off by default, applies only to offers arriving after you enable it, and saves your choice for this game. Existing offers and accepted tasks are left alone. New offers are saved and declined in the simulation before they become available to the game’s offer notifications, without setting the manager’s toolbar dot. The option takes effect when the game confirms the change.
 
-When you switch Auto-decline off, the manager checks saved offers and includes previously hidden contracts directly in **Offered**, with its count updated. A **yellow dot on Offered** marks hidden offers waiting for review; hover to see how many are still available. Opening Offered clears the dot. Use **Show declined** to include manual declines too. Choose **Recover** to restore a contract and open its native details; you still choose whether to Accept or Decline.
+When you switch Auto-decline off, the manager checks saved offers and includes previously hidden contracts directly in **Offered**, with its count updated. A **yellow dot on Offered** marks hidden offers waiting for review; hover to see how many are still available. Opening Offered clears the dot. Use **Show declined** to include manual declines too. Click an offer to open the game’s usual details, then choose Accept or Decline as normal.
 
-Recovery keeps the original requirements and rewards. The remaining offer timer pauses while a contract is saved and resumes when recovered; the deadline for an accepted task is unchanged. Saved offers belong to this save. A contract that cannot be recovered appears in History as **Expired — could not recover**, with a reason and no task-failure penalty. Temporary read errors leave it saved and offer **Try again**.
+Recovery keeps the original requirements and rewards. The remaining offer timer pauses while a contract is saved and resumes when recovered; the deadline for an accepted task is unchanged. Saved offers belong to this save. An offer that is no longer valid appears in History as **Expired**, with a reason and no task-failure penalty. Temporary read errors leave it saved and offer **Try again**.
 
 Recovery covers TF3’s four vanilla subsidy types. It can only recover offers saved by this version onward, and it cannot recover a contract whose referenced destination is no longer valid.
 
@@ -34,7 +34,7 @@ Once your save is loaded:
 1. Click the **contract icon** in the bottom-right toolbar, beside Industry Statistics.
 2. Choose **Offered** for new contracts, **In Progress** for accepted tasks, or **History** for past outcomes.
 3. Click a subsidy to open its details. The game's usual controls handle acceptance and decline.
-4. When Auto-decline is off, hidden offers appear directly in **Offered**. Enable **Show declined** to include manual declines. Choose **Recover** to bring a saved contract back for normal acceptance.
+4. When Auto-decline is off, hidden offers appear directly in **Offered**. Enable **Show declined** to include manual declines. Click a subsidy to open its usual details and choose Accept or Decline.
 5. Press **Refresh** whenever you want to bring the overview up to date, including after accepting a subsidy while paused.
 
 You can move and pin the window. When there are no subsidies in any section, it uses a compact layout with a friendly hint. There is no default keyboard shortcut.

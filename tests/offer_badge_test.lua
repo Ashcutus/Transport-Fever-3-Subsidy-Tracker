@@ -22,6 +22,7 @@ local function offer(uid, id, time)
     return {id = id or "native-offer.res", uid = uid, spawnTime = time or 100, data = {}}
 end
 local commands, archiveCommands, configCommands, commandFailure = {}, {}, {}, false
+local cardAvailable, detailEvents = false, {}
 local saved, component, writes, cardReads, engineReads = nil, nil, 0, 0, 0
 local getFailure, setFailure, engineFailure, unavailable = false, false, false, false
 local function world(offers)
@@ -90,6 +91,7 @@ local function boot()
     function react.onMount(fn) activeContext.mounts[#activeContext.mounts + 1] = fn end
     function react.fireEvent(_, name, data)
         requireMain("react.fireEvent")
+        if name == 'selectViewKey' then detailEvents[#detailEvents + 1] = copy(data) end
         local listener = badgeContext.events[name]
         if listener then listener(name, data) end
         local windowListener = windowContext.events[name]
@@ -127,14 +129,19 @@ local function boot()
             elseif command.action then archiveCommands[#archiveCommands + 1] = command
             else commands[#commands + 1] = command end
         end,
-    }, type = {ComponentType = {GAME_SCRIPT = 1}}, engine = {
+    }, type = {ComponentType = {GAME_SCRIPT = 1, GAME_TIME = 2, GAME_SPEED = 3}}, engine = {
+        util = {getWorld = function() return 1 end},
         system = {gameScriptSystem = {getEntityForGameScript = function(path)
             assert(path == "::/game_mechanics/subventions/subventions.gs")
             engineReads = engineReads + 1
             if engineFailure then error("engine unavailable") end
             return unavailable and nil or 123
         end}}, entityExists = function() return not unavailable end,
-        getComponent = function(_, kind) assert(kind == 1); return component end,
+        getComponent = function(_, kind)
+            if kind == 2 then return {gameTime = 1000} end
+            if kind == 3 then return {millisPerDay = 10} end
+            assert(kind == 1); return component
+        end,
         forEachEntityWithComponent = function() error("Do not enumerate GAME_SCRIPT") end,
     }, gui = {game = {
         getGuiSaveData = function(id)
@@ -148,7 +155,10 @@ local function boot()
             if setFailure then error("bad GUI data write") end
             writes = writes + 1; saved = copy(data)
         end,
-    }}, res = {genericRep = {find = function() cardReads = cardReads + 1; return -1 end}}}
+    }}, res = {genericRep = {
+        find = function() cardReads = cardReads + 1; return cardAvailable and 1 or -1 end,
+        get = function() return {data = {scriptFile = 'test-helper.script'}} end,
+    }}}
     local gameBar = {GameBar = function(params) return params end}
     local env = setmetatable({api = api, _ = function(key) return key end, log = {warning = function() end},
         ug_require = function(path)
@@ -159,6 +169,15 @@ local function boot()
             if path:find("tool_react_util", 1, true) then
                 return {registerToolWithWindow = function(name, _, recipe) return {name = name, recipe = recipe} end}
             end
+            if path:find('/scripts/util.tl', 1, true) then return {
+                useFn = function(ref)
+                    assert(ref == 'test-helper.script.getCardData')
+                    return function() return {expireDuration = {name = 'Task deadline'}, complete = {{text = 'Native reward'}}} end
+                end,
+                formatDurationWithCurrentCalenderSpeed = function(duration, speed)
+                    assert(speed == 10); return 'Native remaining ' .. tostring(duration)
+                end,
+            } end
             return {}
         end,
     }, {__index = _G})
@@ -355,17 +374,20 @@ local function button(tree, text)
 end
 local function tableNode(tree) return assert(findNode(tree, function(n) return n.kind == 'DataTable' end)) end
 reset({}, {unrelated = 'keep'}); commands, archiveCommands, loadEnabled = {}, {}, false
+cardAvailable, detailEvents = true, {}
 assert(not badge()); toggle(true)
 component.state.proposedSubventions = {offer(101)}
 assert(not poll() and not saved.offerBadge.pending, 'Suppressed offers must not set the toolbar dot')
 assert(#commands == 0 and #archiveCommands == 0 and not feedback(render(windowRecipe, windowContext)))
 local hidden1, hidden2, manual, expired = offer(101), offer(102), offer(103), offer(104)
-for _, r in ipairs({hidden1, hidden2, manual, expired}) do r.data.name = 'Saved contract' end
+for _, r in ipairs({hidden1, hidden2, manual, expired}) do
+    r.data.name, r.data.expireDurationProposed = 'Saved contract', 100
+end
 component.state.proposedSubventions = {}
 component.state.tf3SubsidyManagerArchive = {version = 1, entries = {
-    {key = '1', record = hidden1, source = 'automatic', status = 'saved'},
-    {key = '2', record = hidden2, source = 'automatic', status = 'saved'},
-    {key = '3', record = manual, source = 'manual', status = 'saved'},
+    {key = '1', record = hidden1, remaining = 50, source = 'automatic', status = 'saved'},
+    {key = '2', record = hidden2, remaining = 25, source = 'automatic', status = 'saved'},
+    {key = '3', record = manual, remaining = -1, source = 'manual', status = 'saved'},
     {key = '4', record = expired, source = 'automatic', status = 'expired', reason = 'invalid_destination'},
 }, response = {sequence = 0}}
 local tree = render(windowRecipe, windowContext)
@@ -394,25 +416,38 @@ tree.content.children[1].children[4].onValueChange(1)
 tree = render(windowRecipe, windowContext)
 tableView = tableNode(tree)
 assert(#tableView.rowKeys == 3 and #tableView.columns == 6)
-assert(tableView.columns[1].name == 'tf3_subsidy_manager_column_status')
-local actionColumn = tableView.columns[6]
-assert(actionColumn.name == 'tf3_subsidy_manager_column_action')
-local action = actionColumn.recipe({userParam = tableView.userParam, rowKey = 1})
-assert(action.children[1].meta.enabled and action.children[1].content.layout.children[1].text == 'tf3_subsidy_manager_recover')
+for i, name in ipairs({'type', 'resource', 'destination', 'requirement', 'reward', 'time'}) do
+    assert(tableView.columns[i].name == 'tf3_subsidy_manager_column_' .. name)
+    for row = 1, 3 do
+        local cell = tableView.columns[i].recipe({userParam = tableView.userParam, rowKey = row})
+        assert(cell.children[1].meta.enabled, 'Saved offers must look and select like ordinary new offers in every column')
+    end
+end
+local timeCell = tableView.columns[6].recipe({userParam = tableView.userParam, rowKey = 1})
+assert(timeCell.children[1].content.layout.children[1].text == 'Native remaining 50')
+timeCell = tableView.columns[6].recipe({userParam = tableView.userParam, rowKey = 3})
+assert(timeCell.children[1].content.layout.children[1].text == '—', 'Unlimited saved offers must not use an accepted-task deadline')
+local action = tableView.columns[1].recipe({userParam = tableView.userParam, rowKey = 1})
+assert(action.children[1].content.layout.children[1].text == 'Saved contract')
 action.children[1].onClick()
 assert(#archiveCommands == 2 and archiveCommands[2].action == 'recover' and archiveCommands[2].key == '1')
+assert(#detailEvents == 0, 'Native details must wait for the simulation confirmation')
+action.children[1].onClick()
+assert(#archiveCommands == 2, 'Repeated clicks while opening must not duplicate the request')
 -- The snapshot stays unchanged until the simulation confirms recovery.
 assert(#tableNode(render(windowRecipe, windowContext)).rowKeys == 3)
 component.state.proposedSubventions = {copy(hidden1)}
+component.state.proposedSubventions[1].spawnTime = 950
 table.remove(component.state.tf3SubsidyManagerArchive.entries, 1)
 component.state.tf3SubsidyManagerArchive.response = {sequence = 3, action = 'recover', key = '1', success = true, requestId = archiveCommands[2].requestId}
 poll(); tree = render(windowRecipe, windowContext)
-assert(feedback(tree).children[1].text == 'tf3_subsidy_manager_recovered')
+assert(not feedback(tree), 'Opening an offer must not show recovery implementation messages')
+assert(#detailEvents == 1 and detailEvents[1].nonEntity == 'subsidy_101')
 local previousKey = tableView.meta.localKey
 tableView = tableNode(tree)
 assert(tableView.meta.localKey ~= previousKey and #tableView.rowKeys == 3, 'Acknowledgement must rebuild cells')
 -- Recovery failure moves the archived row to History, preserving native failed tasks.
-action = tableView.columns[6].recipe({userParam = tableView.userParam, rowKey = 2})
+action = tableView.columns[2].recipe({userParam = tableView.userParam, rowKey = 2})
 action.children[1].onClick()
 assert(archiveCommands[3].key == '2')
 component.state.tf3SubsidyManagerArchive.entries[1].status = 'expired'
@@ -517,4 +552,11 @@ restricted = false
 badgeContext.expired = true
 flushJoins()
 assert(writes == beforeWrites and #configCommands == beforeCommands and #forbidden == 0)
+-- A legacy success acknowledgement is implementation detail, including when
+-- reopening a save whose archive predates the separate notice field.
+reset({}, {})
+component.state.tf3SubsidyManagerArchive = {version = 1, entries = {}, response = {
+    sequence = 200, action = 'recover', key = 'old', success = true,
+}}
+assert(not feedback(render(windowRecipe, windowContext)))
 print('PASS: stale acknowledgement rejection, authoritative saved simulation mode and expired-toolbar join cancellation')
