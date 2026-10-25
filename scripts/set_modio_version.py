@@ -1,7 +1,16 @@
 #!/usr/bin/env python3
-"""Set version labels after a TF3 upload; preview by default, never upload files."""
+"""Set version labels after a TF3 upload; preview first, never upload files.
+
+Run it, paste your mod.io OAuth access token when asked, pick the uploads to
+relabel if they are not found automatically, then confirm with y.
+
+--sync labels every upload whose changelog starts with a version, e.g.
+"v1.4.1 — Fixes ...". The scheduled GitHub workflow runs it with --apply.
+"""
 import argparse
+import datetime
 import getpass
+import html
 import json
 import os
 from pathlib import Path
@@ -55,6 +64,11 @@ class Client:
                 raise RuntimeError("Incomplete mod.io file listing; no changes made")
 
 
+def plain_text(changelog):
+    # The mod.io website stores edited changelogs as HTML, e.g. "<p>v1.4.0 ...</p>".
+    return html.unescape(re.sub(r"<[^>]+>", " ", changelog or ""))
+
+
 def select_files(files, version, ids=()):
     if ids:
         selected = [file for file in files if file["id"] in ids]
@@ -63,17 +77,68 @@ def select_files(files, version, ids=()):
     else:
         # Only a release heading at the start counts; mentions of older releases do not.
         heading = re.compile(r"^\s*v?" + re.escape(version) + r"(?=$|[\s:—–-])", re.I)
-        selected = [file for file in files if heading.search(file.get("changelog") or "")]
+        selected = [file for file in files if heading.search(plain_text(file.get("changelog")))]
     if not selected:
         raise ValueError("No matching release files. Put vMAJOR.MINOR.PATCH at the start of the upload changelog, or supply --file-id for each reviewed file.")
     return selected
 
 
-def update(client, files, version, apply=False):
+# Release headings for --sync: no leading zeros, so "v1.2.01" is not a release.
+RELEASE_HEADING = re.compile(r"^\s*v?((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))(?=$|[\s:—–-])", re.I)
+RELEASE_LABEL = re.compile(r"\d+\.\d+\.\d+")
+
+
+def plan_sync(files):
+    """Group uploads still carrying a default label by their changelog release."""
+    plan, conflicts = {}, []
+    for file in sorted(files, key=lambda file: file["id"]):
+        match = RELEASE_HEADING.search(plain_text(file.get("changelog")))
+        if not match or file.get("version") == match.group(1):
+            continue
+        # Unattended runs never overwrite a deliberate release label.
+        if RELEASE_LABEL.fullmatch(str(file.get("version") or "")):
+            conflicts.append((file, match.group(1)))
+        else:
+            plan.setdefault(match.group(1), []).append(file)
+    return plan, conflicts
+
+
+def show_files(files, limit=None):
+    newest = sorted(files, key=lambda file: file.get("date_added") or 0, reverse=True)
+    for file in newest[:limit]:
+        added = datetime.datetime.fromtimestamp(file.get("date_added") or 0).strftime("%Y-%m-%d %H:%M")
+        platforms = ", ".join(entry.get("platform", "?") for entry in file.get("platforms") or []) or "-"
+        changelog = " ".join(plain_text(file.get("changelog")).split())[:40]
+        print(f"  ID {file['id']:<10} {file.get('filename', '?'):<28} version {file.get('version')!r:<9} added {added}  [{platforms}]  {changelog}")
+
+
+def choose_files(files, version, ids=(), ask=None):
+    if ids:
+        return select_files(files, version, ids)
+    try:
+        return select_files(files, version)
+    except ValueError:
+        if ask is None:
+            raise
+    print(f"No upload changelog starts with v{version}. Your most recent uploads:")
+    show_files(files, limit=10)
+    answer = ask(f"Type the ID(s) to label {version}, separated by spaces (or press Enter to cancel): ")
+    try:
+        picked = [int(part) for part in re.split(r"[\s,]+", answer.strip()) if part]
+    except ValueError:
+        raise ValueError("File IDs must be numbers; no changes made") from None
+    if not picked:
+        raise ValueError("Cancelled; no changes made")
+    return select_files(files, version, picked)
+
+
+def update(client, files, version, apply=False, confirm=None):
     for file in files:
         print(f"File {file['id']} ({file['filename']}): {file.get('version')!r} -> {version!r}")
+    if not apply and confirm is not None:
+        apply = confirm()
     if not apply:
-        print("Preview only. Run with --apply to update these labels.")
+        print("No changes made." if confirm is not None else "Preview only. Run with --apply to update these labels.")
         return
     for file in files:
         if file.get("version") == version:
@@ -92,20 +157,47 @@ def update(client, files, version, apply=False):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--apply", action="store_true", help="write version labels and verify them")
+    parser.add_argument("--apply", action="store_true", help="write without asking for confirmation")
     parser.add_argument("--version", help="override VERSION for an older release")
     parser.add_argument("--file-id", type=int, action="append", default=[], help="explicit reviewed file ID; repeat for PC/console")
+    parser.add_argument("--list", action="store_true", help="only list this mod's uploads and their IDs")
+    parser.add_argument("--sync", action="store_true", help="label every upload from the version its changelog starts with")
     args = parser.parse_args()
+    if args.sync and (args.version or args.file_id or args.list):
+        parser.error("--sync reads each version from the changelog; do not combine it with --version, --file-id or --list")
     version = args.version or (REPOSITORY / "VERSION").read_text().strip()
     if not re.fullmatch(r"\d+\.\d+\.\d+", version):
         parser.error("version must be MAJOR.MINOR.PATCH")
     if any(file_id <= 0 for file_id in args.file_id):
         parser.error("file IDs must be positive")
-    token = os.environ.get("MODIO_ACCESS_TOKEN") or getpass.getpass("mod.io OAuth access token (hidden): ")
+    token = os.environ.get("MODIO_ACCESS_TOKEN")
+    if not token:
+        if not sys.stdin.isatty():
+            parser.error("set MODIO_ACCESS_TOKEN (in GitHub Actions, the repository secret of that name)")
+        token = getpass.getpass("Paste your mod.io OAuth access token (it stays hidden), then press Enter: ")
     if not token.strip():
         parser.error("an OAuth access token is required")
     client = Client(token.strip())
-    update(client, select_files(client.files(), version, args.file_id), version, args.apply)
+    files = client.files()
+    if args.list:
+        show_files(files)
+        return
+    # Interactive runs can pick files and confirm in one go; scripted runs never prompt.
+    interactive = sys.stdin.isatty() and not args.apply
+    if args.sync:
+        plan, conflicts = plan_sync(files)
+        for file, wanted in conflicts:
+            print(f"Left file {file['id']} unchanged: labelled {file.get('version')!r}, but its changelog starts with v{wanted}")
+        if not plan:
+            print("Every upload with a version at the start of its changelog is labelled.")
+            return
+        for release, group in plan.items():
+            confirm = (lambda release=release, group=group: input(f"Apply {release} to these {len(group)} file(s)? [y/N] ").strip().lower() in ("y", "yes")) if interactive else None
+            update(client, group, release, args.apply, confirm)
+        return
+    selected = choose_files(files, version, args.file_id, input if interactive else None)
+    confirm = (lambda: input(f"Apply {version} to these {len(selected)} file(s)? [y/N] ").strip().lower() in ("y", "yes")) if interactive else None
+    update(client, selected, version, args.apply, confirm)
 
 
 if __name__ == "__main__":
