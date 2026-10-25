@@ -15,13 +15,13 @@ Compare offers, follow the tasks you've accepted, and see how your subsidies tur
 - **Review your results.** History brings together successful and failed subsidies while the game retains them.
 - **Know when something new arrives.** A small dot on the toolbar icon marks new offers since you last opened the manager.
 
-Prefer to hide new offers? Enable **Hide offers** in the manager. It is off by default, applies only to offers arriving after you enable it, and saves your choice for this game. Existing offers, previously revealed missed offers and accepted tasks are left alone. New offers are saved and hidden before they reach the game’s offer notifications, without setting the manager’s toolbar dot. The option takes effect when the game confirms the change. While a subsidy action is finishing, the setting stays readable and shows **please wait**; hover for the reason.
+Prefer to hide new offers? Enable **Hide offers** in the manager. It is off by default, applies only to offers arriving after you enable it, and saves your choice for this game. Existing offers, previously revealed missed offers and accepted tasks are left alone. New offers are saved and hidden before they reach the game’s offer notifications, without setting the manager’s toolbar dot, and keep arriving at the game’s normal pace. The option takes effect when the game confirms the change. While a subsidy action is finishing, the setting stays readable and shows **please wait**; hover for the reason.
 
 When you switch Hide offers off, the manager refreshes the overview automatically, checks saved offers and includes previously hidden contracts directly in **Offered**, with its count updated. The **yellow dot on the toolbar icon** also lights when missed offers become available; opening the manager clears it. A **yellow dot on Offered** marks hidden offers waiting for review; hover to see how many are still available. Opening Offered clears the dot. Switching Hide offers off again only announces newly revealed offers. Use **Show declined** to include manual declines too. Click an offer to open the game’s usual details, then choose Accept or Decline as normal.
 
-Recovery keeps the original requirements and rewards. The remaining offer timer pauses while a contract is saved and resumes when recovered; the deadline for an accepted task is unchanged. Saved offers belong to this save. An offer that is no longer valid appears in History as **Expired**, with a reason and no task-failure penalty. Temporary read errors leave it saved and offer **Try again**.
+Recovery keeps the original requirements and rewards. The remaining offer timer pauses while a contract is saved and resumes when recovered; the deadline for an accepted task is unchanged. Saved offers belong to this save. Up to 50 hidden offers, 20 declined offers and 20 **Expired** History entries are kept; when a limit is reached, the oldest is removed. An offer that is no longer valid appears in History as **Expired**, with a reason and no task-failure penalty. Temporary read errors leave it saved and offer **Try again**.
 
-Recovery covers TF3’s four vanilla subsidy types. It can only recover offers saved by this version onward, and it cannot recover a contract whose referenced destination is no longer valid.
+Recovery covers TF3’s four vanilla subsidy types. It can only recover offers saved by v1.3.0 onward, and it cannot recover a contract whose referenced destination is no longer valid. Campaign mission subsidies are never hidden.
 
 ## Getting started
 
@@ -75,6 +75,10 @@ Each section has its own guidance, with a compact window when the entire overvie
 ![Empty History view explaining where retained outcomes appear](docs/screenshots/empty-history.png)
 
 </details>
+
+## What's new in v1.4.0
+
+Fixes a crash that could occur while starting or loading a game. **Hide offers** no longer makes new offers arrive faster than normal, and saved offers are now limited (50 hidden, 20 declined, 20 Expired) so long games stay light.
 
 ## What's new in v1.3.1
 
