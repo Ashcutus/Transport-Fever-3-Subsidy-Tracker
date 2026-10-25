@@ -28,12 +28,20 @@ local function world(offers)
         usedUids = {[kind] = {}}, version = 1, lastSpawnTime = 100, spawnIntervalModifier = 1}
 end
 local data = world()
+-- TF3 asserts `!m_betweenChanges` when a script subscribes outside the phases
+-- shipped scripts use: update, or the initNewGame/handleLegacy setup events.
+local phase
+local function checkSubscriptionPhase()
+    if phase == 'update' then return end
+    if type(phase) == 'table' and phase[1] == '' and (phase[2] == 'initNewGame' or phase[2] == 'handleLegacy') then return end
+    error('Assertion `!m_betweenChanges` failed: subscription during ' .. (type(phase) == 'table' and (phase[1] .. ':' .. phase[2]) or tostring(phase)))
+end
 local state = {
     get = function() return copy(data) end,
     set = function(_, value) data = copy(value) end,
     hasEventSubscriptions = function() return next(subs) ~= nil end,
-    subscribeToEvent = function(_, event) subs[event] = true end,
-    subscribeToNoEvents = function() subs = {} end,
+    subscribeToEvent = function(_, event) checkSubscriptionPhase(); subs[event] = true end,
+    subscribeToNoEvents = function() checkSubscriptionPhase(); subs = {} end,
 }
 local script, native, nativeUtil
 local functions = {}
@@ -73,7 +81,8 @@ local util = {useFn = function(path)
     if method == 'getNotificationParams' then return function() return {} end end
     error('Unexpected helper: ' .. path)
 end}
-local env = setmetatable({api = api, log = {warning = function() end, verbose = function() end}, ug_require = function(path)
+local warnings = 0
+local env = setmetatable({api = api, log = {warning = function() warnings = warnings + 1 end, verbose = function() end}, ug_require = function(path)
     if path:find('subvention_util.tl', 1, true) then return nativeUtil end
     if path:find('subvention_legacy_util', 1, true) then return {CurrentVersion = 1} end
     if path:find('company_progression_util', 1, true) then return {getCompanyProgressionState = function() return nil end} end
@@ -94,8 +103,21 @@ assert(modifier('other::/other.gs', desc) == desc and desc.updateScript.fileName
 modifier('::/game_mechanics/subventions/subventions.gs', desc)
 assert(desc.updateScript.fileName == 'tf3_subsidy_manager::/plugins/subsidy_manager/recovery.script@update')
 assert(desc.updateScript.params.originalParams.preserved)
-assert(loadfile('mod/tf3_subsidy_manager_1/content/plugins/subsidy_manager/recovery.script.lua', 't', env))()
-script = env.data()
+local recoverySource = os.getenv('TF3_RECOVERY_SOURCE') or 'mod/tf3_subsidy_manager_1/content/plugins/subsidy_manager/recovery.script.lua'
+-- Each load is a fresh script Lua state, as after starting or loading a game.
+local function loadAdapter()
+    assert(loadfile(recoverySource, 't', env))()
+    local raw = env.data()
+    return {
+        update = function(...)
+            phase = 'update'; local result = raw.update(...); phase = nil; return result
+        end,
+        handleEvent = function(params, s, src, id, name, param)
+            phase = {id, name}; local result = raw.handleEvent(params, s, src, id, name, param); phase = nil; return result
+        end,
+    }
+end
+script = loadAdapter()
 local function event(src, id, name, param)
     return script.handleEvent(desc.handleEventScript.params, state, src, id, name, param)
 end
@@ -118,6 +140,32 @@ data = world()
 -- The original script handles real initialization and subscriptions unchanged.
 script.update(desc.updateScript.params, state, 0)
 assert(subs.tf3SubsidyManager and subs.onDecline)
+-- Every start path: setup events reach a fresh script before its first update.
+-- Map/mission/tutorial starts must not subscribe during the event, and our
+-- subscription must not stop the native script initializing its own.
+for _, setup in ipairs({'initNewGameFromMap', 'initMission', 'initTutorial', 'initNewGame', 'handleLegacy'}) do
+    script, subs, data = loadAdapter(), {}, {}
+    if setup == 'handleLegacy' then data = world() end
+    event('', '', setup, nil)
+    assert(not subs.tf3SubsidyManager, setup .. ' subscribed during the setup event')
+    script.update(desc.updateScript.params, state, 0)
+    assert(subs.onAccept and subs.onDecline, setup .. ' prevented native subsidy subscriptions')
+    assert(subs.tf3SubsidyManager, setup .. ' left manager commands unsubscribed')
+end
+-- Loading a save clears all subscriptions; ours returns on the next update.
+event('', '', 'handleLegacy', nil)
+assert(subs.onDecline and not subs.tf3SubsidyManager)
+script.update(desc.updateScript.params, state, 0)
+assert(subs.tf3SubsidyManager, 'handleLegacy must not permanently remove manager subscriptions')
+-- Ordinary events before the first update of a fresh script state never subscribe.
+script, subs, data = loadAdapter(), {onDecline = true}, world({offer(5)})
+event('', 'Subvention', 'onDecline', {uid = 5})
+event('tf3_subsidy_manager', 'tf3SubsidyManager', 'tf3SubsidyManager', {action = 'review'})
+assert(#data.proposedSubventions == 0 and not subs.tf3SubsidyManager)
+script.update(desc.updateScript.params, state, 0)
+assert(subs.tf3SubsidyManager)
+data = world()
+print('PASS: no subscriptions during map/mission/tutorial/free-game/load setup or ordinary events; native subscriptions initialize and manager commands resubscribe on update')
 -- Automatic/manual decline records full detached contracts, without payments.
 data = world({offer(10), offer(11)}); local original = copy(data.proposedSubventions[1])
 decline(10, true); decline(11, false)
@@ -130,8 +178,7 @@ time = 10000
 assert(request('review').count == 1 and #data.proposedSubventions == 0 and #sent == 0)
 -- Recreate the adapter and serialize the state through detached copies, as on reload.
 local saved = copy(data)
-assert(loadfile('mod/tf3_subsidy_manager_1/content/plugins/subsidy_manager/recovery.script.lua', 't', env))()
-script = env.data(); data = copy(saved)
+script = loadAdapter(); data = copy(saved)
 assert(request('recover', '1').success and payments == 0 and #data.proposedSubventions == 1)
 local restored = data.proposedSubventions[1]
 assert(restored.uid == original.uid and restored.id == original.id and restored.spawnTime == 9950)
@@ -255,7 +302,7 @@ spawnMode, spawnUid, forbiddenUid = true, 80, 80
 script.update(desc.updateScript.params, state, 1)
 assert(#data.proposedSubventions == 1 and data.proposedSubventions[1].uid == 70)
 assert(#archive().entries == 1 and archive().entries[1].record.uid == 80 and archive().entries[1].source == 'automatic')
-assert(data.spawnIntervalModifier == 0.5, 'Use the actual native decline handler')
+assert(data.spawnIntervalModifier == 1, 'Hidden offers keep the native spawn interval instead of the decline speed-up')
 assert(notifiedUids()[70] and not notifiedUids()[80])
 -- Input-command spawns use the same buffered commit, not just ordinary updates.
 forbiddenUid = 81
@@ -290,8 +337,7 @@ print('PASS: atomic suppression of native update/event spawns before the shipped
 config(true, false)
 assert(archive().entries[1].revealed and archive().entries[2].revealed)
 data = copy(data)
-assert(loadfile('mod/tf3_subsidy_manager_1/content/plugins/subsidy_manager/recovery.script.lua', 't', env))()
-script = env.data()
+script = loadAdapter()
 assert(request('recover', '1').success)
 spawnMode = false
 script.update(desc.updateScript.params, state, 0)
@@ -334,3 +380,51 @@ assert(archive().response.requestId == 'session:123')
 table.insert(archive().entries, 1, 'malformed')
 assert(request('recover', '1').success, 'Malformed unrelated archive entry must not block valid recovery')
 print('PASS: failed/no-op native declines roll back saved copies, retries remain possible, request correlation and malformed-entry isolation')
+
+-- Native decline matches only the UID. Another type's offer may share it, so
+-- leave that new offer visible instead of rolling back a decline every update.
+local cargo = '::/game_mechanics/subventions/deliver_cargo/deliver_cargo.res'
+data = world({offer(95, cargo)}); data.lastSpawnTime = 0; config(true, false)
+spawnMode, spawnUid, warnings = true, 95, 0; time = time + 2
+script.update(desc.updateScript.params, state, 1)
+spawnMode = false
+script.update(desc.updateScript.params, state, 0)
+assert(#data.proposedSubventions == 2 and data.proposedSubventions[1].id == cargo and data.proposedSubventions[2].id == kind)
+assert(#archive().entries == 0 and warnings == 0, 'Shared native UIDs must not trigger failing decline attempts')
+print('PASS: offers sharing a native UID stay visible without repeated rollback')
+
+-- Saved contracts are capped per kind; the newest entries are kept.
+data = world(); config(false, false)
+for uid = 100, 124 do data.proposedSubventions[#data.proposedSubventions + 1] = offer(uid) end
+for uid = 100, 124 do decline(uid, false) end
+assert(#archive().entries == 20 and archive().entries[1].record.uid == 105 and archive().entries[20].record.uid == 124)
+assert(data.spawnIntervalModifier == 0.5, 'Manual declines keep the native next-offer speed-up')
+-- Older versions could save without limits: the startup sync trims them first.
+local entries = {}
+for index = 1, 55 do entries[index] = {key = 'a' .. index, record = offer(200 + index), remaining = 50, source = 'automatic', status = 'saved'} end
+for index = 1, 25 do entries[#entries + 1] = {key = 'e' .. index, record = offer(300 + index), remaining = 0, source = 'automatic', status = 'expired', reason = 'timeout'} end
+entries[#entries + 1] = 'malformed'
+entries[#entries + 1] = {key = 'future', status = 'unknown'}
+data = world(); data.tf3SubsidyManagerArchive = {version = 1, nextKey = 100, entries = entries, response = {sequence = 0}}
+local trimmed = config(false, true)
+assert(trimmed.count == 50, 'Review counts only retained offers')
+local kinds = {}
+for _, entry in ipairs(archive().entries) do
+    local kind = type(entry) == 'table' and entry.status or 'malformed'
+    kinds[kind] = (kinds[kind] or 0) + 1
+end
+assert(kinds.saved == 50 and kinds.expired == 20 and kinds.malformed == 1 and kinds.unknown == 1)
+assert(archive().entries[1].key == 'a6', 'The oldest hidden offers are dropped first')
+-- A newly hidden offer at the limit replaces the oldest one.
+config(true, false)
+spawnMode, spawnUid = true, 400; time = time + 2; data.lastSpawnTime = 0
+script.update(desc.updateScript.params, state, 1)
+spawnMode = false
+local saved, newest = 0, nil
+for _, entry in ipairs(archive().entries) do
+    if type(entry) == 'table' and entry.status == 'saved' then saved = saved + 1; newest = entry end
+    assert(type(entry) ~= 'table' or entry.key ~= 'a6')
+end
+assert(saved == 50 and newest.record.uid == 400 and #data.proposedSubventions == 0)
+assert(data.spawnIntervalModifier == 1)
+print('PASS: newest 50 hidden, 20 declined and 20 expired entries retained, legacy archives trimmed, unknown entries preserved, normal spawn interval while hiding')

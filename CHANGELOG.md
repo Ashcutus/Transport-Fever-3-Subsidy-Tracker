@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.4.0 — Crash fix and lighter saves
+
+- Fixed a crash that could occur while starting or loading a game.
+- **Hide offers** no longer makes new offers arrive faster than normal.
+- Saved offers are now limited, keeping long games light: up to 50 hidden offers, 20 declined offers and 20 **Expired** History entries. When a limit is reached, the oldest is removed.
+
 ## v1.3.1 — More reliable toolbar
 
 - Switching Hide offers off refreshes the overview after the game confirms the change.

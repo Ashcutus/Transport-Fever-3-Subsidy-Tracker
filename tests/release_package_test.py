@@ -12,12 +12,12 @@ spec = importlib.util.spec_from_file_location("package_release", ROOT / "scripts
 builder = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(builder)
 version = (ROOT / "VERSION").read_text().strip()
-assert version == "1.3.1"
+assert version == "1.4.0"
 with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
     archive = builder.build(Path(first))
     again = builder.build(Path(second))
     assert archive.read_bytes() == again.read_bytes(), "Package builds must be reproducible"
-    assert archive.name == "subsidy-manager-v1.3.1.zip"
+    assert archive.name == "subsidy-manager-v1.4.0.zip"
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     assert archive.with_suffix(".zip.sha256").read_text().split()[0] == digest
     with zipfile.ZipFile(archive) as package:
@@ -29,7 +29,7 @@ with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as se
         assert not any(re.search(r"tests/|AGENTS|README|tlconfig|all_def|\.svg$|__pycache__|\.git", name) for name in names)
         manifest = json.loads(package.read(prefix + "mod.json"))
         assert manifest["modId"] == "tf3_subsidy_manager"
-        assert type(manifest["revision"]) is int and manifest["revision"] == 19, "Launcher patch increments published revision 18 once"
+        assert type(manifest["revision"]) is int and manifest["revision"] == 20, "v1.4.0 increments published revision 19 once"
         assert manifest == json.loads((builder.MOD / "mod.json").read_text())
         assert "version" not in manifest and "platforms" not in manifest
         assert manifest["cosmetic"] is False, "Recovery changes simulation behaviour"
@@ -62,7 +62,7 @@ with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as se
             assert "tf3_subsidy_manager_recovery_reason_" + reason in strings
         assert strings["tf3_subsidy_manager_hidden_available"] == "%d previously hidden subsidies are still available."
         assert "Declined offers cannot be restored" not in info["description"]
-        assert "v1.3.1" in info["description"] and "v1.3.0" in info["description"] and "v1.2.0" in info["description"]
+        assert all(f"v{release}" in info["description"] for release in ("1.4.0", "1.3.1", "1.3.0", "1.2.0", "1.0.0"))
         for suffix in ("active", "offered", "history"):
             assert "tf3_subsidy_manager_" + suffix in strings
         for suffix in ("type", "resource", "destination", "requirement", "reward", "time", "progress", "deadline", "status", "reward_consequence"):

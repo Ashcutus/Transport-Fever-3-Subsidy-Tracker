@@ -37,6 +37,23 @@ local function archive(data)
     return value
 end
 
+-- Keep only the newest saved contracts of each kind. The archive lives in the
+-- native state, which TF3 rewrites every update, and the manager formats every
+-- entry when it opens. Unknown or malformed entries are left untouched.
+local LIMITS = {automatic = 50, manual = 20, expired = 20}
+local function prune(saved)
+    local counts = {automatic = 0, manual = 0, expired = 0}
+    for index = #saved.entries, 1, -1 do
+        local entry = saved.entries[index]
+        local kind = type(entry) == "table" and (entry.status == "expired" and "expired"
+            or entry.status == "saved" and (entry.source == "automatic" and "automatic" or "manual")) or nil
+        if kind then
+            counts[kind] = counts[kind] + 1
+            if counts[kind] > LIMITS[kind] then table.remove(saved.entries, index) end
+        end
+    end
+end
+
 local function remember(data, uid, automatic)
     for _, record in ipairs(data.proposedSubventions or {}) do
         if record.uid == uid then
@@ -51,6 +68,7 @@ local function remember(data, uid, automatic)
                 source = automatic and "automatic" or "manual", status = "saved",
             }
             saved.nextKey = saved.nextKey + 1
+            prune(saved)
             return
         end
     end
@@ -126,6 +144,8 @@ local function command(state, param)
     if type(data) ~= "table" or type(data.proposedSubventions) ~= "table"
         or type(data.activeSubventions) ~= "table" then return end
     local saved = archive(data)
+    -- Also trims archives saved by earlier versions on the startup sync.
+    prune(saved)
     if param.action == "configure" then
         if type(param.enabled) ~= "boolean" then return end
         configure(saved, data, param.enabled)
@@ -181,6 +201,7 @@ local function command(state, param)
                     table.remove(saved.entries, index)
                     respond(saved, param, "recover", param.key, true)
                 end
+                prune(saved)
                 state:set(data)
                 return
             end
@@ -189,6 +210,7 @@ local function command(state, param)
     else
         return
     end
+    prune(saved)
     state:set(data)
 end
 
@@ -215,19 +237,29 @@ local function runNative(params, state, fn, ...)
         local saved = staged[FIELD]
         local automatic = type(saved) == "table" and saved.version == 1 and saved.automatic
         if type(automatic) == "table" and automatic.enabled == true and type(automatic.protected) == "table" then
-            local keep = {}
+            local keep, uids = {}, {}
+            for _, record in ipairs(staged.proposedSubventions) do
+                if type(record) == "table" and record.uid ~= nil then uids[record.uid] = (uids[record.uid] or 0) + 1 end
+            end
             for _, record in ipairs(copy(staged.proposedSubventions)) do
                 local key = identity(record)
                 if key and automatic.protected[key] then keep[key] = true
-                elseif key then
+                -- Native decline removes the first offer with this UID, which may
+                -- be another type's offer. Leave shared UIDs visible rather than
+                -- rolling back the same failed decline on every update.
+                elseif key and uids[record.uid] == 1 then
                     local before = copy(staged)
                     local ok, err = pcall(function()
                         remember(staged, record.uid, true)
+                        local modifier = staged.spawnIntervalModifier
                         local decline = assert(util.useFn(params.nativeEvent))
                         decline(params.nativeEventParams or {}, proxy, AUTO_SOURCE, "Subvention", "onDecline", {uid = record.uid})
                         for _, remaining in ipairs(staged.proposedSubventions) do
                             assert(remaining.uid ~= record.uid, "Native decline did not remove offer")
                         end
+                        -- Hiding is not a player decline: keep the spawn interval
+                        -- instead of the decline speed-up, which doubles new offers.
+                        staged.spawnIntervalModifier = modifier
                     end)
                     if not ok then
                         staged = before
@@ -244,6 +276,10 @@ local function runNative(params, state, fn, ...)
 end
 
 function data()
+    -- Subscribe only from update, after the native callback, as base scripts do.
+    -- TF3 asserts (m_betweenChanges) when a script subscribes while handling
+    -- ordinary or map/mission/tutorial setup events. The native script also
+    -- initializes its subscriptions only while it has none at all.
     local subscribed = false
     return {
         update = function(params, state, dt)
@@ -274,7 +310,9 @@ function data()
                 end
             end
             local result = runNative(params, state, original(params), src, id, name, param)
-            if not subscribed or id == "" then state:subscribeToEvent(NAMESPACE); subscribed = true end
+            -- initNewGame/handleLegacy resubscribe the native script from scratch,
+            -- removing ours. Restore it on the next update, never during an event.
+            if id == "" then subscribed = false end
             return result
         end,
     }
